@@ -236,6 +236,11 @@
             const excessUnits = units - WATER_FREE_UNITS; const excessCost = excessUnits * rate;
             return { total: WATER_MINIMUM_CHARGE + excessCost, breakdown: `₱300 + (${excessUnits} m³ × ₱${rate}) = ${formatCurrency(WATER_MINIMUM_CHARGE + excessCost)}`, excessUnits, minimumApplied: false };
         }
+        
+        // ---------- NEW: Round up electric cost to whole number ----------
+        function roundUpElectricCost(cost) {
+            return Math.ceil(cost);
+        }
 
         // Toast
         window.showToast = function(msg, type='success') {
@@ -347,7 +352,8 @@
                 const waterRate = tenant._waterRate || DEFAULT_WATER_RATE;
                 const rent = tenant._rent || DEFAULT_RENT; const billTo = tenant._billTo || '';
                 const elecUnits = Math.max(0, elecCurr - elecPrev);
-                const elecCost = elecUnits * elecRate;
+                const elecCostRaw = elecUnits * elecRate;
+                const elecCost = roundUpElectricCost(elecCostRaw); // ROUND UP TO WHOLE NUMBER
                 const waterUnits = Math.max(0, waterCurr - waterPrev);
                 const waterResult = getWaterBreakdown(waterUnits, waterRate);
                 const waterCost = waterResult.total;
@@ -425,14 +431,47 @@
                 const waterRate = tenant._waterRate || DEFAULT_WATER_RATE;
                 const rent = tenant._rent || DEFAULT_RENT; const billTo = tenant._billTo || tenant.billTo || '';
                 const elecUnits = Math.max(0, elecCurr - elecPrev);
-                const elecCost = elecUnits * elecRate;
+                const elecCostRaw = elecUnits * elecRate;
+                const elecCost = roundUpElectricCost(elecCostRaw); // ROUND UP TO WHOLE NUMBER
                 const waterUnits = Math.max(0, waterCurr - waterPrev);
                 const waterResult = getWaterBreakdown(waterUnits, waterRate);
                 const waterCost = waterResult.total;
                 const utilitiesTotal = elecCost + waterCost;
                 const overallTotal = rent + utilitiesTotal;
                 const idx = allBills.findIndex(b => b.tenantId === tenant.id && b.monthKey === monthKey);
-                const bill = { tenantId: tenant.id, tenantName: tenant.name, room, billTo, monthKey, monthDisplay: formatMonthDisplay(y,m), rent, elecPrev, elecCurr, elecRate, elecUnits, elecCost, waterPrev, waterCurr, waterRate, waterUnits, waterCost, waterBreakdown: waterResult.breakdown, waterMinimumApplied: waterResult.minimumApplied, waterExcessUnits: waterResult.excessUnits, utilitiesTotal, overallTotal, timestamp: new Date().toISOString(), paymentFooter: PAYMENT_FOOTER, rentDueDate: rentDueDate.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}), utilitiesDueDate: utilitiesDueDate.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}), rentGracePeriodEnd: rentGracePeriodEnd.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}), gracePeriodDays: settings.gracePeriodDays, rentDueDay: settings.rentDueDay, utilitiesDueDay: settings.utilitiesDueDay, rentHasGracePeriod: true };
+                const bill = { 
+                    tenantId: tenant.id, 
+                    tenantName: tenant.name, 
+                    room, 
+                    billTo, 
+                    monthKey, 
+                    monthDisplay: formatMonthDisplay(y,m), 
+                    rent, 
+                    elecPrev, 
+                    elecCurr, 
+                    elecRate, 
+                    elecUnits, 
+                    elecCost, // Already rounded up
+                    waterPrev, 
+                    waterCurr, 
+                    waterRate, 
+                    waterUnits, 
+                    waterCost, 
+                    waterBreakdown: waterResult.breakdown, 
+                    waterMinimumApplied: waterResult.minimumApplied, 
+                    waterExcessUnits: waterResult.excessUnits, 
+                    utilitiesTotal, 
+                    overallTotal, 
+                    timestamp: new Date().toISOString(), 
+                    paymentFooter: PAYMENT_FOOTER, 
+                    rentDueDate: rentDueDate.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}), 
+                    utilitiesDueDate: utilitiesDueDate.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}), 
+                    rentGracePeriodEnd: rentGracePeriodEnd.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}), 
+                    gracePeriodDays: settings.gracePeriodDays, 
+                    rentDueDay: settings.rentDueDay, 
+                    utilitiesDueDay: settings.utilitiesDueDay, 
+                    rentHasGracePeriod: true 
+                };
                 if (idx !== -1) allBills[idx] = bill;
                 else allBills.push(bill);
                 generated++;
@@ -467,7 +506,7 @@
             historyBody.innerHTML = html;
         }
 
-        // ---------- PDF generation (FIXED - each copy on separate page) ----------
+        // ---------- PDF generation ----------
         function generateBillHTML(bill, display, copyType) {
             const roomDisplay = bill.room || 'N/A';
             const copyColor = copyType === "TENANT'S COPY" ? '#1a3d6b' : '#8B0000';
@@ -766,14 +805,12 @@
                 </style>
             </head><body>`;
             
-            // Add each bill as a separate page
             monthBills.forEach(bill => {
                 allContent += generateBillHTML(bill, display, "TENANT'S COPY");
                 allContent += generateBillHTML(bill, display, "OWNER'S COPY");
             });
             
             allContent += `<script>
-                // Auto-print when loaded
                 window.onload = function() {
                     setTimeout(function() {
                         window.print();
@@ -781,7 +818,6 @@
                 };
             <\/script></body></html>`;
             
-            // Open in new window
             const win = window.open('', '_blank', 'width=1100,height=900');
             if (!win) {
                 showToast('Please allow popups for this site.', 'error');
@@ -856,7 +892,7 @@
         loadFromStorage();
         const initKey = monthSelect.value;
         if (initKey) loadMonthForAll(initKey);
-        console.log('✅ Elena\'s Apartment Multi-Tenant Billing System ready. (Import/Export added)');
+        console.log('✅ Elena\'s Apartment Multi-Tenant Billing System ready. (Electric cost rounded up)');
     })();
 </script>
 </body>
