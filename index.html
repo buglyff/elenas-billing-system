@@ -467,33 +467,73 @@
             historyBody.innerHTML = html;
         }
 
-        // ---------- PDF generation (simplified) ----------
+        // ---------- PDF generation (FIXED - each copy on separate page) ----------
         function generateBillHTML(bill, display, copyType) {
             const roomDisplay = bill.room || 'N/A';
             const copyColor = copyType === "TENANT'S COPY" ? '#1a3d6b' : '#8B0000';
             const copyBg = copyType === "TENANT'S COPY" ? '#e8f0fe' : '#fce4e4';
             const copyBorder = copyType === "TENANT'S COPY" ? '#1a3d6b' : '#8B0000';
-            return `<div class="bill-container" style="page-break-after:always;">
-                <div class="bill-header"><div style="text-align:right;margin-bottom:2px;"><span style="display:inline-block;background:${copyBg};color:${copyColor};padding:2px 14px;border-radius:16px;font-size:0.6rem;font-weight:700;border:1.5px solid ${copyBorder};letter-spacing:0.5px;text-transform:uppercase;">${copyType}</span></div>
-                <h1>🏢 ELENA'S APARTMENT</h1><h2>Monthly Billing Statement</h2><h3>${bill.monthDisplay||display}</h3></div>
-                <div class="bill-details"><p style="font-size:0.95rem;"><span class="room-label">Room:</span> <span class="room-badge"><strong>${roomDisplay}</strong></span></p>
-                <p><strong>Tenant:</strong> ${bill.tenantName||'N/A'}</p><p><strong>Bill To:</strong> ${bill.billTo||'N/A'}</p></div>
-                <div class="due-dates"><div class="due-item"><span><strong>💰 RENT DUE DATE:</strong></span><span class="fw-bold" style="color:#1a3d6b;">${bill.rentDueDate||'—'}</span></div>
-                <div class="due-item"><span><strong>⏳ Rent Grace Period:</strong></span><span class="grace-note">${bill.gracePeriodDays||2} day(s) until ${bill.rentGracePeriodEnd||'—'}</span></div>
-                <hr class="section-divider"><div class="due-item"><span><strong>⚡ UTILITIES DUE DATE:</strong></span><span class="fw-bold text-danger">${bill.utilitiesDueDate||'—'} <span class="text-muted" style="font-size:0.65rem;">(no grace period)</span></span></div>
-                <div style="margin-top:4px;font-size:0.7rem;color:#856404;border-top:1px dashed #e0c78a;padding-top:4px;"><i class="fas fa-info-circle"></i> <strong>Rent</strong> has a grace period of ${bill.gracePeriodDays} day(s). <strong>Utilities</strong> are due on the specified date with no grace period.</div></div>
-                <table><tr><th style="width:70%;">Description</th><th style="width:30%;text-align:right;">Amount</th></tr>
-                <tr class="rent-total-row"><td style="font-size:1rem;color:#1a3d6b;"><strong>💰 RENT</strong><br><span class="text-muted" style="font-size:0.65rem;">Due: ${bill.rentDueDate} (grace until ${bill.rentGracePeriodEnd})</span></td><td style="text-align:right;font-size:1rem;color:#1a3d6b;"><strong>${formatCurrency(bill.rent)}</strong></td></tr>
-                <tr class="utilities-header-row"><td colspan="2" style="font-size:0.9rem;color:#1a3d6b;padding-top:10px;"><strong>⚡ UTILITIES:</strong></td></tr>
-                <tr class="elec-row"><td style="font-weight:500;color:#2a5f8f;">Electricity</td><td class="amount">${formatCurrency(bill.elecCost)}</td></tr>
-                <tr class="water-row"><td style="font-weight:500;color:#2a5f8f;">Water</td><td class="amount">${formatCurrency(bill.waterCost)}</td></tr>
-                <tr class="utilities-total-row"><td style="font-size:0.95rem;color:#1a3d6b;"><strong>⚡ UTILITIES TOTAL</strong><br><span class="text-muted text-danger" style="font-size:0.6rem;">Due: ${bill.utilitiesDueDate} (no grace period)</span></td><td style="text-align:right;font-size:0.95rem;color:#1a3d6b;"><strong>${formatCurrency(bill.utilitiesTotal)}</strong></td></tr></table>
-                <div class="footer"><p><strong>Meter Readings:</strong></p><p style="font-size:0.75rem;">Electricity: ${bill.elecPrev} → ${bill.elecCurr} (<span class="elec-unit">${bill.elecUnits.toFixed(1)} kWh</span> used) &nbsp;|&nbsp; Water: ${bill.waterPrev} → ${bill.waterCurr} (${bill.waterUnits.toFixed(1)} m³ used)</p>
-                <p class="water-note" style="font-size:0.65rem;">Water billing: First 10 m³ = ₱300 minimum</p>
-                <div class="payment-note"><p><strong>Payment Instructions:</strong></p><p style="font-size:0.7rem;">📝 Please make all check payable to <strong>Evergino M. Ocampo, Sr.</strong></p>
-                <p style="font-size:0.7rem;">🏦 BDO Ormoc Branch / Current Acct.: <strong>004910084153</strong> &nbsp;|&nbsp; 📱 Gcash: <strong>0946 293 9879</strong></p><p style="font-size:0.7rem;">📞 Concerns: <strong>0938 308 6966 / 0916 651 4977</strong></p></div>
-                <div class="received-section"><p style="font-size:0.8rem;"><strong>Received by:</strong> ____________________ &nbsp;&nbsp;&nbsp; <strong>Date:</strong> ____________________</p></div>
-                <p style="margin-top:6px;font-size:0.55rem;color:#888;text-align:center;">Generated: ${new Date().toLocaleString()}</p></div></div>`;
+            
+            return `
+            <div class="bill-page">
+                <div class="bill-container">
+                    <div class="bill-header">
+                        <div style="text-align:right;margin-bottom:2px;">
+                            <span style="display:inline-block;background:${copyBg};color:${copyColor};padding:2px 14px;border-radius:16px;font-size:0.6rem;font-weight:700;border:1.5px solid ${copyBorder};letter-spacing:0.5px;text-transform:uppercase;">${copyType}</span>
+                        </div>
+                        <h1>🏢 ELENA'S APARTMENT</h1>
+                        <h2>Monthly Billing Statement</h2>
+                        <h3>${bill.monthDisplay||display}</h3>
+                    </div>
+                    
+                    <div class="bill-details">
+                        <p style="font-size:0.95rem;"><span class="room-label">Room:</span> <span class="room-badge"><strong>${roomDisplay}</strong></span></p>
+                        <p><strong>Tenant:</strong> ${bill.tenantName||'N/A'}</p>
+                        <p><strong>Bill To:</strong> ${bill.billTo||'N/A'}</p>
+                    </div>
+                    
+                    <div class="due-dates">
+                        <div class="due-item"><span><strong>💰 RENT DUE DATE:</strong></span><span class="fw-bold" style="color:#1a3d6b;">${bill.rentDueDate||'—'}</span></div>
+                        <div class="due-item"><span><strong>⏳ Rent Grace Period:</strong></span><span class="grace-note">${bill.gracePeriodDays||2} day(s) until ${bill.rentGracePeriodEnd||'—'}</span></div>
+                        <hr class="section-divider">
+                        <div class="due-item"><span><strong>⚡ UTILITIES DUE DATE:</strong></span><span class="fw-bold text-danger">${bill.utilitiesDueDate||'—'} <span class="text-muted" style="font-size:0.65rem;">(no grace period)</span></span></div>
+                        <div style="margin-top:4px;font-size:0.7rem;color:#856404;border-top:1px dashed #e0c78a;padding-top:4px;"><i class="fas fa-info-circle"></i> <strong>Rent</strong> has a grace period of ${bill.gracePeriodDays} day(s). <strong>Utilities</strong> are due on the specified date with no grace period.</div>
+                    </div>
+                    
+                    <table>
+                        <tr><th style="width:70%;">Description</th><th style="width:30%;text-align:right;">Amount</th></tr>
+                        <tr class="rent-total-row">
+                            <td style="font-size:1rem;color:#1a3d6b;"><strong>💰 RENT</strong><br><span class="text-muted" style="font-size:0.65rem;">Due: ${bill.rentDueDate} (grace until ${bill.rentGracePeriodEnd})</span></td>
+                            <td style="text-align:right;font-size:1rem;color:#1a3d6b;"><strong>${formatCurrency(bill.rent)}</strong></td>
+                        </tr>
+                        <tr class="utilities-header-row"><td colspan="2" style="font-size:0.9rem;color:#1a3d6b;padding-top:10px;"><strong>⚡ UTILITIES:</strong></td></tr>
+                        <tr class="elec-row"><td style="font-weight:500;color:#2a5f8f;">Electricity</td><td class="amount">${formatCurrency(bill.elecCost)}</td></tr>
+                        <tr class="water-row"><td style="font-weight:500;color:#2a5f8f;">Water</td><td class="amount">${formatCurrency(bill.waterCost)}</td></tr>
+                        <tr class="utilities-total-row">
+                            <td style="font-size:0.95rem;color:#1a3d6b;"><strong>⚡ UTILITIES TOTAL</strong><br><span class="text-muted text-danger" style="font-size:0.6rem;">Due: ${bill.utilitiesDueDate} (no grace period)</span></td>
+                            <td style="text-align:right;font-size:0.95rem;color:#1a3d6b;"><strong>${formatCurrency(bill.utilitiesTotal)}</strong></td>
+                        </tr>
+                    </table>
+                    
+                    <div class="footer">
+                        <p><strong>Meter Readings:</strong></p>
+                        <p style="font-size:0.75rem;">Electricity: ${bill.elecPrev} → ${bill.elecCurr} (<span class="elec-unit">${bill.elecUnits.toFixed(1)} kWh</span> used) &nbsp;|&nbsp; Water: ${bill.waterPrev} → ${bill.waterCurr} (${bill.waterUnits.toFixed(1)} m³ used)</p>
+                        <p class="water-note" style="font-size:0.65rem;">Water billing: First 10 m³ = ₱300 minimum</p>
+                        
+                        <div class="payment-note">
+                            <p><strong>Payment Instructions:</strong></p>
+                            <p style="font-size:0.7rem;">📝 Please make all check payable to <strong>Evergino M. Ocampo, Sr.</strong></p>
+                            <p style="font-size:0.7rem;">🏦 BDO Ormoc Branch / Current Acct.: <strong>004910084153</strong> &nbsp;|&nbsp; 📱 Gcash: <strong>0946 293 9879</strong></p>
+                            <p style="font-size:0.7rem;">📞 Concerns: <strong>0938 308 6966 / 0916 651 4977</strong></p>
+                        </div>
+                        
+                        <div class="received-section">
+                            <p style="font-size:0.8rem;"><strong>Received by:</strong> ____________________ &nbsp;&nbsp;&nbsp; <strong>Date:</strong> ____________________</p>
+                        </div>
+                        <p style="margin-top:6px;font-size:0.55rem;color:#888;text-align:center;">Generated: ${new Date().toLocaleString()}</p>
+                    </div>
+                </div>
+            </div>`;
         }
 
         function exportAllPDFs() {
@@ -503,55 +543,253 @@
             if (!monthBills.length) { showToast('No bills for this month. Generate first.', 'error'); return; }
             const [y,m] = monthKey.split('-').map(Number);
             const display = formatMonthDisplay(y,m);
+            
             let allContent = `<html><head><title>Elena's Apartment - Billing Statements</title>
-                <style>${document.querySelector('style').innerHTML}</style>
-                <style>.bill-container{width:100%;max-width:100%;margin:0;padding:18px 22px;border:none;border-radius:0;page-break-after:always;height:100vh;min-height:9.5in;display:flex;flex-direction:column;justify-content:space-between;}
-                .bill-header{text-align:center;border-bottom:3px solid #1a3d6b;padding-bottom:12px;margin-bottom:12px;}
-                .bill-header h1{color:#1a3d6b;margin:0;font-size:1.8rem;letter-spacing:1px;}
-                .bill-header h2{color:#4a6a8a;margin:4px 0;font-size:1.2rem;font-weight:500;}
-                .bill-header h3{margin:3px 0;font-size:1.1rem;color:#3a5a7a;font-weight:600;}
-                .bill-details{background:#f8faff;padding:12px 16px;border-radius:6px;margin:10px 0;font-size:0.95rem;border:1px solid #eaf0f6;}
-                .bill-details p{margin:5px 0;}
-                .room-badge{background:#1a3d6b!important;color:#FFFFFF!important;padding:4px 20px!important;border-radius:20px!important;font-size:1rem!important;display:inline-block!important;font-weight:700!important;letter-spacing:0.5px!important;border:2px solid #1a3d6b!important;}
-                .room-badge strong{color:#FFFFFF!important;font-weight:700!important;}
-                .room-label{font-weight:700;font-size:1rem;color:#1a3d6b;}
-                table{width:100%;border-collapse:collapse;margin:10px 0;font-size:0.95rem;flex-shrink:0;}
-                th{background:#eef3f9;padding:8px 10px;text-align:left;font-size:0.8rem;text-transform:uppercase;letter-spacing:0.5px;color:#3a5a7a;border-bottom:2px solid #dde5ed;}
-                td{padding:7px 10px;border-bottom:1px solid #eaf0f6;}
-                .rent-total-row{background:#e8f0fe;font-weight:700;border-top:2px solid #1a3d6b;}
-                .rent-total-row td{color:#1a3d6b;padding:12px 10px;font-size:1.1rem;}
-                .utilities-total-row{background:#f0f7ff;font-weight:700;border-top:2px solid #2a7de1;}
-                .utilities-total-row td{color:#1a3d6b;padding:12px 10px;font-size:1.05rem;}
-                .utilities-header-row td{background:#f8faff;font-weight:700;color:#1a3d6b;padding:12px 10px 4px 10px;border-bottom:none;font-size:1rem;}
-                .elec-row td,.water-row td{padding:6px 10px 6px 25px;}
-                .elec-row .amount,.water-row .amount{text-align:right;}
-                .amount{text-align:right;}
-                .footer{margin-top:auto;padding-top:14px;border-top:3px solid #1a3d6b;font-size:0.85rem;color:#333;}
-                .footer p{margin:4px 0;}
-                .footer .payment-note{background:#f8faff;padding:10px 14px;border-radius:6px;margin:8px 0;border-left:4px solid #1a3d6b;font-size:0.8rem;}
-                .footer .payment-note p{margin:2px 0;}
-                .received-section{margin-top:20px;padding-top:10px;border-top:1px dashed #999;}
-                .received-section p{font-size:0.9rem;margin:4px 0;}
-                .water-note{font-style:italic;color:#666;margin-top:4px;font-size:0.75rem;}
-                .elec-unit{font-weight:600;color:#1a3d6b;}
-                .due-dates{background:#fff8e6;padding:10px 14px;border-radius:6px;margin:10px 0;border-left:4px solid #ffc107;font-size:0.85rem;}
-                .due-dates .due-item{display:flex;justify-content:space-between;padding:3px 0;}
-                .grace-note{color:#856404;font-weight:500;}
-                .text-muted{color:#6f8ba5;font-weight:400;}
-                .text-danger{color:#dc3545;}
-                .fw-bold{font-weight:700;}
-                .section-divider{border:none;border-top:1.5px dashed #dde5ed;margin:6px 0;}
-                @media print{@page{margin:0.3in 0.4in;size:letter;}body{margin:0;padding:0;height:100vh;}.bill-container{page-break-after:always;border:none;border-radius:0;margin:0;padding:15px 20px;height:100vh;min-height:9in;display:flex;flex-direction:column;justify-content:space-between;}.room-badge{background:#1a3d6b!important;color:#FFFFFF!important;padding:4px 20px!important;border-radius:20px!important;font-size:1rem!important;display:inline-block!important;font-weight:700!important;letter-spacing:0.5px!important;border:2px solid #1a3d6b!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}.room-badge strong{color:#FFFFFF!important;font-weight:700!important;}.rent-total-row{background:#e8f0fe!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}.utilities-total-row{background:#f0f7ff!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}.utilities-header-row td{background:#f8faff!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}.due-dates{background:#fff8e6!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}.bill-details{background:#f8faff!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}.footer .payment-note{background:#f8faff!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}.bill-container>div:first-child{flex:1 0 auto;}.footer{margin-top:auto;}}
-</style></head><body>`;
+                <meta charset="UTF-8">
+                <style>
+                    /* Reset for print */
+                    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Roboto, system-ui, sans-serif; }
+                    
+                    /* Each bill page - forces a new page */
+                    .bill-page {
+                        page-break-after: always;
+                        page-break-inside: avoid;
+                        height: 100vh;
+                        min-height: 100vh;
+                        width: 100%;
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: center;
+                        padding: 0.5in 0.6in;
+                        box-sizing: border-box;
+                        background: white;
+                    }
+                    .bill-page:last-child {
+                        page-break-after: avoid;
+                    }
+                    
+                    .bill-container {
+                        width: 100%;
+                        max-width: 100%;
+                        margin: 0 auto;
+                        padding: 0;
+                        border: none;
+                        border-radius: 0;
+                        height: 100%;
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: space-between;
+                    }
+                    
+                    .bill-header {
+                        text-align: center;
+                        border-bottom: 3px solid #1a3d6b;
+                        padding-bottom: 12px;
+                        margin-bottom: 12px;
+                        flex-shrink: 0;
+                    }
+                    .bill-header h1 { color: #1a3d6b; margin: 0; font-size: 1.8rem; letter-spacing: 1px; }
+                    .bill-header h2 { color: #4a6a8a; margin: 4px 0; font-size: 1.2rem; font-weight: 500; }
+                    .bill-header h3 { margin: 3px 0; font-size: 1.1rem; color: #3a5a7a; font-weight: 600; }
+                    
+                    .bill-details {
+                        background: #f8faff;
+                        padding: 12px 16px;
+                        border-radius: 6px;
+                        margin: 10px 0;
+                        font-size: 0.95rem;
+                        border: 1px solid #eaf0f6;
+                        flex-shrink: 0;
+                    }
+                    .bill-details p { margin: 5px 0; }
+                    
+                    .room-badge {
+                        background: #1a3d6b !important;
+                        color: #FFFFFF !important;
+                        padding: 4px 20px !important;
+                        border-radius: 20px !important;
+                        font-size: 1rem !important;
+                        display: inline-block !important;
+                        font-weight: 700 !important;
+                        letter-spacing: 0.5px !important;
+                        border: 2px solid #1a3d6b !important;
+                    }
+                    .room-badge strong { color: #FFFFFF !important; font-weight: 700 !important; }
+                    .room-label { font-weight: 700; font-size: 1rem; color: #1a3d6b; }
+                    
+                    table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin: 10px 0;
+                        font-size: 0.95rem;
+                        flex-shrink: 0;
+                    }
+                    th {
+                        background: #eef3f9;
+                        padding: 8px 10px;
+                        text-align: left;
+                        font-size: 0.8rem;
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
+                        color: #3a5a7a;
+                        border-bottom: 2px solid #dde5ed;
+                    }
+                    td { padding: 7px 10px; border-bottom: 1px solid #eaf0f6; }
+                    
+                    .rent-total-row {
+                        background: #e8f0fe;
+                        font-weight: 700;
+                        border-top: 2px solid #1a3d6b;
+                    }
+                    .rent-total-row td { color: #1a3d6b; padding: 12px 10px; font-size: 1.1rem; }
+                    
+                    .utilities-total-row {
+                        background: #f0f7ff;
+                        font-weight: 700;
+                        border-top: 2px solid #2a7de1;
+                    }
+                    .utilities-total-row td { color: #1a3d6b; padding: 12px 10px; font-size: 1.05rem; }
+                    
+                    .utilities-header-row td {
+                        background: #f8faff;
+                        font-weight: 700;
+                        color: #1a3d6b;
+                        padding: 12px 10px 4px 10px;
+                        border-bottom: none;
+                        font-size: 1rem;
+                    }
+                    .elec-row td, .water-row td { padding: 6px 10px 6px 25px; }
+                    .elec-row .amount, .water-row .amount { text-align: right; }
+                    .amount { text-align: right; }
+                    
+                    .footer {
+                        margin-top: auto;
+                        padding-top: 14px;
+                        border-top: 3px solid #1a3d6b;
+                        font-size: 0.85rem;
+                        color: #333;
+                        flex-shrink: 0;
+                    }
+                    .footer p { margin: 4px 0; }
+                    
+                    .footer .payment-note {
+                        background: #f8faff;
+                        padding: 10px 14px;
+                        border-radius: 6px;
+                        margin: 8px 0;
+                        border-left: 4px solid #1a3d6b;
+                        font-size: 0.8rem;
+                    }
+                    .footer .payment-note p { margin: 2px 0; }
+                    
+                    .received-section {
+                        margin-top: 20px;
+                        padding-top: 10px;
+                        border-top: 1px dashed #999;
+                    }
+                    .received-section p { font-size: 0.9rem; margin: 4px 0; }
+                    
+                    .water-note { font-style: italic; color: #666; margin-top: 4px; font-size: 0.75rem; }
+                    .elec-unit { font-weight: 600; color: #1a3d6b; }
+                    
+                    .due-dates {
+                        background: #fff8e6;
+                        padding: 10px 14px;
+                        border-radius: 6px;
+                        margin: 10px 0;
+                        border-left: 4px solid #ffc107;
+                        font-size: 0.85rem;
+                        flex-shrink: 0;
+                    }
+                    .due-dates .due-item { display: flex; justify-content: space-between; padding: 3px 0; }
+                    .grace-note { color: #856404; font-weight: 500; }
+                    .text-muted { color: #6f8ba5; font-weight: 400; }
+                    .text-danger { color: #dc3545; }
+                    .fw-bold { font-weight: 700; }
+                    .section-divider { border: none; border-top: 1.5px dashed #dde5ed; margin: 6px 0; }
+                    
+                    @page {
+                        margin: 0;
+                        size: letter;
+                    }
+                    
+                    @media print {
+                        body {
+                            margin: 0;
+                            padding: 0;
+                            background: white;
+                        }
+                        .bill-page {
+                            page-break-after: always;
+                            page-break-inside: avoid;
+                            height: 100vh;
+                            min-height: 100vh;
+                            width: 100%;
+                            padding: 0.4in 0.6in;
+                            box-sizing: border-box;
+                            display: flex;
+                            flex-direction: column;
+                            justify-content: center;
+                            background: white;
+                        }
+                        .bill-page:last-child {
+                            page-break-after: avoid;
+                        }
+                        .bill-container {
+                            height: 100%;
+                            display: flex;
+                            flex-direction: column;
+                            justify-content: space-between;
+                            padding: 0;
+                            margin: 0;
+                        }
+                        .room-badge {
+                            background: #1a3d6b !important;
+                            color: #FFFFFF !important;
+                            padding: 4px 20px !important;
+                            border-radius: 20px !important;
+                            font-size: 1rem !important;
+                            display: inline-block !important;
+                            font-weight: 700 !important;
+                            letter-spacing: 0.5px !important;
+                            border: 2px solid #1a3d6b !important;
+                            -webkit-print-color-adjust: exact !important;
+                            print-color-adjust: exact !important;
+                        }
+                        .rent-total-row { background: #e8f0fe !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                        .utilities-total-row { background: #f0f7ff !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                        .utilities-header-row td { background: #f8faff !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                        .due-dates { background: #fff8e6 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                        .bill-details { background: #f8faff !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                        .footer .payment-note { background: #f8faff !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                    }
+                </style>
+            </head><body>`;
+            
+            // Add each bill as a separate page
             monthBills.forEach(bill => {
                 allContent += generateBillHTML(bill, display, "TENANT'S COPY");
                 allContent += generateBillHTML(bill, display, "OWNER'S COPY");
             });
-            allContent += `<script>window.onload=function(){setTimeout(function(){window.print();},500);}<\/script></body></html>`;
-            const win = window.open('', '_blank');
+            
+            allContent += `<script>
+                // Auto-print when loaded
+                window.onload = function() {
+                    setTimeout(function() {
+                        window.print();
+                    }, 500);
+                };
+            <\/script></body></html>`;
+            
+            // Open in new window
+            const win = window.open('', '_blank', 'width=1100,height=900');
+            if (!win) {
+                showToast('Please allow popups for this site.', 'error');
+                return;
+            }
             win.document.write(allContent);
             win.document.close();
-            showToast(`Opened ${monthBills.length} bills (Tenant+Owner copies)`, 'success');
+            showToast(`Opened ${monthBills.length} bills (Tenant+Owner copies on separate pages)`, 'success');
         }
 
         // ---------- Clear ----------
