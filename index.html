@@ -507,73 +507,73 @@
         }
 
         // ---------- PDF generation ----------
-        function generateBillHTML(bill, display, copyType) {
-            const roomDisplay = bill.room || 'N/A';
-            const copyColor = copyType === "TENANT'S COPY" ? '#1a3d6b' : '#8B0000';
-            const copyBg = copyType === "TENANT'S COPY" ? '#e8f0fe' : '#fce4e4';
-            const copyBorder = copyType === "TENANT'S COPY" ? '#1a3d6b' : '#8B0000';
-            
-            return `
-            <div class="bill-page">
-                <div class="bill-container">
-                    <div class="bill-header">
-                        <div style="text-align:right;margin-bottom:2px;">
-                            <span style="display:inline-block;background:${copyBg};color:${copyColor};padding:2px 14px;border-radius:16px;font-size:0.6rem;font-weight:700;border:1.5px solid ${copyBorder};letter-spacing:0.5px;text-transform:uppercase;">${copyType}</span>
-                        </div>
-                        <h1>🏢 ELENA'S APARTMENT</h1>
-                        <h2>Monthly Billing Statement</h2>
-                        <h3>${bill.monthDisplay||display}</h3>
-                    </div>
-                    
-                    <div class="bill-details">
-                        <p style="font-size:0.95rem;"><span class="room-label">Room:</span> <span class="room-badge"><strong>${roomDisplay}</strong></span></p>
-                        <p><strong>Tenant:</strong> ${bill.tenantName||'N/A'}</p>
-                        <p><strong>Bill To:</strong> ${bill.billTo||'N/A'}</p>
-                    </div>
-                    
-                    <div class="due-dates">
-                        <div class="due-item"><span><strong>💰 RENT DUE DATE:</strong></span><span class="fw-bold" style="color:#1a3d6b;">${bill.rentDueDate||'—'}</span></div>
-                        <div class="due-item"><span><strong>⏳ Rent Grace Period:</strong></span><span class="grace-note">${bill.gracePeriodDays||2} day(s) until ${bill.rentGracePeriodEnd||'—'}</span></div>
-                        <hr class="section-divider">
-                        <div class="due-item"><span><strong>⚡ UTILITIES DUE DATE:</strong></span><span class="fw-bold text-danger">${bill.utilitiesDueDate||'—'} <span class="text-muted" style="font-size:0.65rem;">(no grace period)</span></span></div>
-                        <div style="margin-top:4px;font-size:0.7rem;color:#856404;border-top:1px dashed #e0c78a;padding-top:4px;"><i class="fas fa-info-circle"></i> <strong>Rent</strong> has a grace period of ${bill.gracePeriodDays} day(s). <strong>Utilities</strong> are due on the specified date with no grace period.</div>
-                    </div>
-                    
-                    <table>
-                        <tr><th style="width:70%;">Description</th><th style="width:30%;text-align:right;">Amount</th></tr>
-                        <tr class="rent-total-row">
-                            <td style="font-size:1rem;color:#1a3d6b;"><strong>💰 RENT</strong><br><span class="text-muted" style="font-size:0.65rem;">Due: ${bill.rentDueDate} (grace until ${bill.rentGracePeriodEnd})</span></td>
-                            <td style="text-align:right;font-size:1rem;color:#1a3d6b;"><strong>${formatCurrency(bill.rent)}</strong></td>
-                        </tr>
-                        <tr class="utilities-header-row"><td colspan="2" style="font-size:0.9rem;color:#1a3d6b;padding-top:10px;"><strong>⚡ UTILITIES:</strong></td></tr>
-                        <tr class="elec-row"><td style="font-weight:500;color:#2a5f8f;">Electricity</td><td class="amount">${formatCurrency(bill.elecCost)}</td></tr>
-                        <tr class="water-row"><td style="font-weight:500;color:#2a5f8f;">Water</td><td class="amount">${formatCurrency(bill.waterCost)}</td></tr>
-                        <tr class="utilities-total-row">
-                            <td style="font-size:0.95rem;color:#1a3d6b;"><strong>⚡ UTILITIES TOTAL</strong><br><span class="text-muted text-danger" style="font-size:0.6rem;">Due: ${bill.utilitiesDueDate} (no grace period)</span></td>
-                            <td style="text-align:right;font-size:0.95rem;color:#1a3d6b;"><strong>${formatCurrency(bill.utilitiesTotal)}</strong></td>
-                        </tr>
-                    </table>
-                    
-                    <div class="footer">
-                        <p><strong>Meter Readings:</strong></p>
-                        <p style="font-size:0.75rem;">Electricity: ${bill.elecPrev} → ${bill.elecCurr} (<span class="elec-unit">${bill.elecUnits.toFixed(1)} kWh</span> used) &nbsp;|&nbsp; Water: ${bill.waterPrev} → ${bill.waterCurr} (${bill.waterUnits.toFixed(1)} m³ used)</p>
-                        <p class="water-note" style="font-size:0.65rem;">Water billing: First 10 m³ = ₱300 minimum</p>
-                        
-                        <div class="payment-note">
-                            <p><strong>Payment Instructions:</strong></p>
-                            <p style="font-size:0.7rem;">📝 Please make all check payable to <strong>Evergino M. Ocampo, Sr.</strong></p>
-                            <p style="font-size:0.7rem;">🏦 BDO Ormoc Branch / Current Acct.: <strong>004910084153</strong> &nbsp;|&nbsp; 📱 Gcash: <strong>0946 293 9879</strong></p>
-                            <p style="font-size:0.7rem;">📞 Concerns: <strong>0938 308 6966 / 0916 651 4977</strong></p>
-                        </div>
-                        
-                        <div class="received-section">
-                            <p style="font-size:0.8rem;"><strong>Received by:</strong> ____________________ &nbsp;&nbsp;&nbsp; <strong>Date:</strong> ____________________</p>
-                        </div>
-                        <p style="margin-top:6px;font-size:0.55rem;color:#888;text-align:center;">Generated: ${new Date().toLocaleString()}</p>
-                    </div>
+       function generateBillHTML(bill, display, copyType) {
+    const roomDisplay = bill.room || 'N/A';
+    const copyColor = copyType === "TENANT'S COPY" ? '#1a3d6b' : '#8B0000';
+    const copyBg = copyType === "TENANT'S COPY" ? '#e8f0fe' : '#fce4e4';
+    const copyBorder = copyType === "TENANT'S COPY" ? '#1a3d6b' : '#8B0000';
+    
+    return `
+    <div class="bill-page">
+        <div class="bill-container">
+            <div class="bill-header">
+                <div style="text-align:right;margin-bottom:2px;">
+                    <span style="display:inline-block;background:${copyBg};color:${copyColor};padding:2px 14px;border-radius:16px;font-size:0.6rem;font-weight:700;border:1.5px solid ${copyBorder};letter-spacing:0.5px;text-transform:uppercase;">${copyType}</span>
                 </div>
-            </div>`;
-        }
+                <h1>🏢 ELENA'S APARTMENT</h1>
+                <h2>Monthly Billing Statement</h2>
+                <h3>${bill.monthDisplay||display}</h3>
+            </div>
+            
+            <div class="bill-details">
+                <p style="font-size:0.95rem;"><span class="room-badge"><strong>${roomDisplay}</strong></span></p>
+                <p><strong>Tenant:</strong> ${bill.tenantName||'N/A'}</p>
+                <p><strong>Bill To:</strong> ${bill.billTo||'N/A'}</p>
+            </div>
+            
+            <div class="due-dates">
+                <div class="due-item"><span><strong>💰 RENT DUE DATE:</strong></span><span class="fw-bold" style="color:#1a3d6b;">${bill.rentDueDate||'—'}</span></div>
+                <div class="due-item"><span><strong>⏳ Rent Grace Period:</strong></span><span class="grace-note">${bill.gracePeriodDays||2} day(s) until ${bill.rentGracePeriodEnd||'—'}</span></div>
+                <hr class="section-divider">
+                <div class="due-item"><span><strong>⚡ UTILITIES DUE DATE:</strong></span><span class="fw-bold text-danger">${bill.utilitiesDueDate||'—'} <span class="text-muted" style="font-size:0.65rem;">(no grace period)</span></span></div>
+                <div style="margin-top:4px;font-size:0.7rem;color:#856404;border-top:1px dashed #e0c78a;padding-top:4px;"><i class="fas fa-info-circle"></i> <strong>Rent</strong> has a grace period of ${bill.gracePeriodDays} day(s). <strong>Utilities</strong> are due on the specified date with no grace period.</div>
+            </div>
+            
+            <table>
+                <tr><th style="width:70%;">Description</th><th style="width:30%;text-align:right;">Amount</th></tr>
+                <tr class="rent-total-row">
+                    <td style="font-size:1rem;color:#1a3d6b;"><strong>💰 RENT</strong><br><span class="text-muted" style="font-size:0.65rem;">Due: ${bill.rentDueDate} (grace until ${bill.rentGracePeriodEnd})</span></td>
+                    <td style="text-align:right;font-size:1rem;color:#1a3d6b;"><strong>${formatCurrency(bill.rent)}</strong></td>
+                </tr>
+                <tr class="utilities-header-row"><td colspan="2" style="font-size:0.9rem;color:#1a3d6b;padding-top:10px;"><strong>⚡ UTILITIES:</strong></td></tr>
+                <tr class="elec-row"><td style="font-weight:500;color:#2a5f8f;">Electricity</td><td class="amount">${formatCurrency(bill.elecCost)}</td></tr>
+                <tr class="water-row"><td style="font-weight:500;color:#2a5f8f;">Water</td><td class="amount">${formatCurrency(bill.waterCost)}</td></tr>
+                <tr class="utilities-total-row">
+                    <td style="font-size:0.95rem;color:#1a3d6b;"><strong>⚡ UTILITIES TOTAL</strong><br><span class="text-muted text-danger" style="font-size:0.6rem;">Due: ${bill.utilitiesDueDate} (no grace period)</span></td>
+                    <td style="text-align:right;font-size:0.95rem;color:#1a3d6b;"><strong>${formatCurrency(bill.utilitiesTotal)}</strong></td>
+                </tr>
+            </table>
+            
+            <div class="footer">
+                <p><strong>Meter Readings:</strong></p>
+                <p style="font-size:0.75rem;">Electricity: ${bill.elecPrev} → ${bill.elecCurr} (<span class="elec-unit">${bill.elecUnits.toFixed(1)} kWh</span> used) &nbsp;|&nbsp; Water: ${bill.waterPrev} → ${bill.waterCurr} (${bill.waterUnits.toFixed(1)} m³ used)</p>
+                <p class="water-note" style="font-size:0.65rem;">Water billing: First 10 m³ = ₱300 minimum</p>
+                
+                <div class="payment-note">
+                    <p><strong>Payment Instructions:</strong></p>
+                    <p style="font-size:0.7rem;">📝 Please make all check payable to <strong>Evergino M. Ocampo, Sr.</strong></p>
+                    <p style="font-size:0.7rem;">🏦 BDO Ormoc Branch / Current Acct.: <strong>004910084153</strong> &nbsp;|&nbsp; 📱 Gcash: <strong>0946 293 9879</strong></p>
+                    <p style="font-size:0.7rem;">📞 Concerns: <strong>0938 308 6966 / 0916 651 4977</strong></p>
+                </div>
+                
+                <div class="received-section">
+                    <p style="font-size:0.8rem;"><strong>Received by:</strong> ____________________ &nbsp;&nbsp;&nbsp; <strong>Date:</strong> ____________________</p>
+                </div>
+                <p style="margin-top:6px;font-size:0.55rem;color:#888;text-align:center;">Generated: ${new Date().toLocaleString()}</p>
+            </div>
+        </div>
+    </div>`;
+}
 
         function exportAllPDFs() {
             const monthKey = monthSelect.value;
