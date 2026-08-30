@@ -76,6 +76,12 @@
         @media (max-width: 480px) { .billing-settings { grid-template-columns: 1fr; } }
         @media print { .btn-group, .no-print { display: none !important; } .card { box-shadow: none; border: 1px solid #ddd; } .header { background: #1a3d6b !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
         .empty-state { padding: 2rem; text-align: center; color: #6f8ba5; font-style: italic; }
+        .last-read-badge { font-size: 0.65rem; color: #6f8ba5; margin-left: 4px; font-weight: 400; }
+        .input-group-small { display: flex; flex-direction: column; gap: 2px; }
+        .input-group-small .last-read { font-size: 0.6rem; color: #6f8ba5; padding-left: 4px; }
+        /* Auto-save indicator */
+        .saved-indicator { font-size: 0.7rem; color: #28a745; margin-left: 8px; opacity: 0; transition: opacity 0.3s; }
+        .saved-indicator.show { opacity: 1; }
     </style>
 </head>
 <body>
@@ -103,7 +109,8 @@
     <!-- Billing Form -->
     <div class="card">
         <div class="card-title"><i class="fas fa-users"></i> Tenant Billing <span class="badge-count" id="tenantCount">0 tenants</span>
-            <span style="margin-left: auto; font-size: 0.9rem; font-weight: 400; color: #6f8ba5;"><i class="fas fa-info-circle"></i> Click "Generate All Bills" to calculate all</span>
+            <span style="margin-left: auto; font-size: 0.9rem; font-weight: 400; color: #6f8ba5;"><i class="fas fa-info-circle"></i> Click "Generate & Save Bills" to calculate all</span>
+            <span class="saved-indicator" id="savedIndicator"><i class="fas fa-check-circle"></i> Saved</span>
         </div>
 
         <!-- Global Controls -->
@@ -112,8 +119,7 @@
                 <label style="font-weight: 600; color: #4b6584; font-size: 0.85rem;"><i class="fas fa-calendar"></i> Month:</label>
                 <select id="billingMonth" style="padding: 0.5rem 1rem; border-radius: 12px; border: 1.5px solid #dde5ed; background: white; font-size: 0.9rem;"></select>
                 <button class="btn btn-outline btn-sm" id="loadMonthBtn"><i class="fas fa-undo-alt"></i> Load Month</button>
-                <button class="btn btn-warning btn-sm" id="generateAllBtn"><i class="fas fa-file-invoice"></i> Generate All Bills</button>
-                <button class="btn btn-success btn-sm" id="saveAllBtn"><i class="fas fa-save"></i> Save All Bills</button>
+                <button class="btn btn-warning btn-sm" id="generateAllBtn"><i class="fas fa-file-invoice"></i> Generate & Save Bills</button>
             </div>
             <div style="display: flex; gap: 0.5rem; margin-left: auto; flex-wrap: wrap;">
                 <button class="btn btn-outline btn-sm" id="addTenantBtn"><i class="fas fa-user-plus"></i> Add Tenant</button>
@@ -172,7 +178,7 @@
         // ---------- Constants ----------
         const WATER_MINIMUM_CHARGE = 300;
         const WATER_FREE_UNITS = 10;
-        const STORAGE_KEY = 'elenasApartmentMultiTenantV19';
+        const STORAGE_KEY = 'elenasApartmentMultiTenantV21';
         const DEFAULT_RENT = 15000;
         const DEFAULT_ELEC_RATE = 12;
         const DEFAULT_WATER_RATE = 30;
@@ -193,17 +199,18 @@
         const billingMonthRef = document.getElementById('billingMonthRef');
         const loadBtn = document.getElementById('loadMonthBtn');
         const generateAllBtn = document.getElementById('generateAllBtn');
-        const saveAllBtn = document.getElementById('saveAllBtn');
         const addTenantBtn = document.getElementById('addTenantBtn');
         const pdfAllBtn = document.getElementById('pdfAllBtn');
         const clearAllBtn = document.getElementById('clearAllBtn');
         const exportDataBtn = document.getElementById('exportDataBtn');
         const importFileInput = document.getElementById('importFileInput');
+        const savedIndicator = document.getElementById('savedIndicator');
 
         // ---------- State ----------
         let tenants = [];
         let allBills = [];
         let currentMonthKey = '';
+        let saveTimeout = null;
 
         // ---------- Settings ----------
         function getSettings() {
@@ -237,7 +244,7 @@
             return { total: WATER_MINIMUM_CHARGE + excessCost, breakdown: `₱300 + (${excessUnits} m³ × ₱${rate}) = ${formatCurrency(WATER_MINIMUM_CHARGE + excessCost)}`, excessUnits, minimumApplied: false };
         }
         
-        // ---------- NEW: Round up electric cost to whole number ----------
+        // Round up electric cost to whole number
         function roundUpElectricCost(cost) {
             return Math.ceil(cost);
         }
@@ -249,6 +256,15 @@
             setTimeout(() => t.classList.remove('show'), 4000);
         };
         window.hideToast = function() { document.getElementById('toast').classList.remove('show'); };
+
+        // Show saved indicator briefly
+        function showSavedIndicator() {
+            savedIndicator.classList.add('show');
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(() => {
+                savedIndicator.classList.remove('show');
+            }, 2000);
+        }
 
         // Month dropdown
         function populateMonthDropdown() {
@@ -290,15 +306,27 @@
                 ];
                 saveToStorage();
             }
-            // Ensure all tenants have _ fields
+            // Ensure all tenants have _ fields and default values
             tenants = tenants.map(t => {
-                return { ...t, _room: t._room || t.room || '', _elecPrev: t._elecPrev || 0, _elecCurr: t._elecCurr || 0, _elecRate: t._elecRate || t.elecRate || DEFAULT_ELEC_RATE, _waterPrev: t._waterPrev || 0, _waterCurr: t._waterCurr || 0, _waterRate: t._waterRate || t.waterRate || DEFAULT_WATER_RATE, _rent: t._rent || t.rent || DEFAULT_RENT, _billTo: t._billTo || t.billTo || '' };
+                return { 
+                    ...t, 
+                    _room: t._room || t.room || '', 
+                    _elecPrev: t._elecPrev !== undefined ? t._elecPrev : 0, 
+                    _elecCurr: t._elecCurr !== undefined ? t._elecCurr : 0, 
+                    _elecRate: t._elecRate || t.elecRate || DEFAULT_ELEC_RATE, 
+                    _waterPrev: t._waterPrev !== undefined ? t._waterPrev : 0, 
+                    _waterCurr: t._waterCurr !== undefined ? t._waterCurr : 0, 
+                    _waterRate: t._waterRate || t.waterRate || DEFAULT_WATER_RATE, 
+                    _rent: t._rent || t.rent || DEFAULT_RENT, 
+                    _billTo: t._billTo || t.billTo || '' 
+                };
             });
             renderTenants(); renderHistory();
         }
         function saveToStorage() {
             localStorage.setItem(STORAGE_KEY, JSON.stringify({ tenants, bills: allBills }));
             renderHistory();
+            showSavedIndicator();
         }
 
         // ---------- Load month ----------
@@ -324,7 +352,8 @@
                     tenant._billTo = existing.billTo || tenant.billTo || '';
                     tenant._room = existing.room || tenant.room || '';
                 } else {
-                    tenant._elecPrev = prev ? prev.elec : 0; tenant._waterPrev = prev ? prev.water : 0;
+                    tenant._elecPrev = prev ? prev.elec : 0; 
+                    tenant._waterPrev = prev ? prev.water : 0;
                     tenant._elecCurr = 0; tenant._waterCurr = 0;
                     tenant._elecRate = tenant.elecRate || DEFAULT_ELEC_RATE;
                     tenant._waterRate = tenant.waterRate || DEFAULT_WATER_RATE;
@@ -344,33 +373,56 @@
                 summaryFooter.style.display = 'none'; tenantCount.textContent = '0 tenants'; return;
             }
             let html = ''; let grandTotalSum = 0;
+            const monthKey = monthSelect.value;
+            
             tenants.forEach((tenant, index) => {
                 const room = tenant._room || tenant.room || '';
+                const billTo = tenant._billTo || '';
+                const rent = tenant._rent || DEFAULT_RENT;
                 const elecPrev = tenant._elecPrev || 0; const elecCurr = tenant._elecCurr || 0;
                 const elecRate = tenant._elecRate || DEFAULT_ELEC_RATE;
                 const waterPrev = tenant._waterPrev || 0; const waterCurr = tenant._waterCurr || 0;
                 const waterRate = tenant._waterRate || DEFAULT_WATER_RATE;
-                const rent = tenant._rent || DEFAULT_RENT; const billTo = tenant._billTo || '';
+                
                 const elecUnits = Math.max(0, elecCurr - elecPrev);
                 const elecCostRaw = elecUnits * elecRate;
                 const elecCost = roundUpElectricCost(elecCostRaw);
+                
                 const waterUnits = Math.max(0, waterCurr - waterPrev);
                 const waterResult = getWaterBreakdown(waterUnits, waterRate);
                 const waterCost = waterResult.total;
+                
                 const total = rent + elecCost + waterCost;
                 grandTotalSum += total;
+                
                 const waterBadge = waterResult.minimumApplied ? `<span class="badge badge-warning water-badge">min</span>` : `<span class="badge badge-info water-badge">+excess</span>`;
+                
+                // Get previous month readings for display
+                const prevReadings = getPreviousMonthReadings(tenant.id, monthKey);
+                const prevElecDisplay = prevReadings ? `Last: ${prevReadings.elec}` : '';
+                const prevWaterDisplay = prevReadings ? `Last: ${prevReadings.water}` : '';
+                
                 html += `<tr class="tenant-row" data-tenant-id="${tenant.id}">
                     <td>${index+1}</td>
-                    <td class="room-cell"><input type="text" value="${room}" data-field="room" data-id="${tenant.id}" placeholder="Room #" style="width:70px;min-width:50px;font-weight:600;color:#1a3d6b;" /></td>
+                    <td class="room-cell"><input type="text" value="${room}" data-field="room" data-id="${tenant.id}" placeholder="e.g., 101" style="width:70px;min-width:50px;font-weight:600;color:#1a3d6b;" /></td>
                     <td class="tenant-name-cell"><input type="text" value="${tenant.name}" data-field="name" data-id="${tenant.id}" placeholder="Tenant Name" /></td>
-                    <td><input type="text" value="${billTo}" data-field="billTo" data-id="${tenant.id}" placeholder="Bill To" /></td>
+                    <td><input type="text" value="${billTo}" data-field="billTo" data-id="${tenant.id}" placeholder="Company or Family Name" /></td>
                     <td><input type="number" step="0.01" value="${rent}" data-field="rent" data-id="${tenant.id}" /></td>
-                    <td><input type="number" step="1" value="${elecPrev}" data-field="elecPrev" data-id="${tenant.id}" placeholder="kWh" /></td>
+                    <td>
+                        <div class="input-group-small">
+                            <input type="number" step="1" value="${elecPrev}" data-field="elecPrev" data-id="${tenant.id}" placeholder="kWh" />
+                            <span class="last-read">${prevElecDisplay}</span>
+                        </div>
+                    </td>
                     <td><input type="number" step="1" value="${elecCurr}" data-field="elecCurr" data-id="${tenant.id}" placeholder="kWh" /></td>
                     <td><input type="number" step="0.01" value="${elecRate}" data-field="elecRate" data-id="${tenant.id}" /></td>
                     <td><input type="text" readonly value="${formatCurrency(elecCost)}" style="background:#f8faff;font-weight:500;" /></td>
-                    <td><input type="number" step="1" value="${waterPrev}" data-field="waterPrev" data-id="${tenant.id}" placeholder="m³" /></td>
+                    <td>
+                        <div class="input-group-small">
+                            <input type="number" step="1" value="${waterPrev}" data-field="waterPrev" data-id="${tenant.id}" placeholder="m³" />
+                            <span class="last-read">${prevWaterDisplay}</span>
+                        </div>
+                    </td>
                     <td><input type="number" step="1" value="${waterCurr}" data-field="waterCurr" data-id="${tenant.id}" placeholder="m³" /></td>
                     <td><input type="number" step="0.01" value="${waterRate}" data-field="waterRate" data-id="${tenant.id}" /></td>
                     <td><span style="font-weight:500;">${formatCurrency(waterCost)}</span> ${waterBadge}<br><small style="font-size:0.65rem;color:#6f8ba5;">${waterResult.breakdown}</small></td>
@@ -382,9 +434,19 @@
             summaryFooter.style.display = 'table-footer-group';
             grandTotal.textContent = formatCurrency(grandTotalSum);
             tenantCount.textContent = `${tenants.length} tenants`;
+            
+            // Attach event listeners for blur event only
             document.querySelectorAll('[data-field]').forEach(input => {
-                input.addEventListener('blur', function() { updateTenantField(this.dataset.id, this.dataset.field, this.value); });
-                input.addEventListener('keydown', function(e) { if (e.key === 'Enter') this.blur(); });
+                // Use blur event to save when user leaves the field
+                input.addEventListener('blur', function() { 
+                    updateTenantField(this.dataset.id, this.dataset.field, this.value); 
+                });
+                // Also save on Enter key press
+                input.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        this.blur();
+                    }
+                });
             });
         }
 
@@ -394,103 +456,145 @@
             const map = { 'room': '_room', 'name': 'name', 'billTo': '_billTo', 'rent': '_rent', 'elecPrev': '_elecPrev', 'elecCurr': '_elecCurr', 'elecRate': '_elecRate', 'waterPrev': '_waterPrev', 'waterCurr': '_waterCurr', 'waterRate': '_waterRate' };
             const mf = map[field];
             if (!mf) return;
-            if (['_rent','_elecPrev','_elecCurr','_elecRate','_waterPrev','_waterCurr','_waterRate'].includes(mf)) tenant[mf] = parseFloat(value) || 0;
-            else tenant[mf] = value;
-            renderTenants(); saveToStorage();
+            if (['_rent','_elecPrev','_elecCurr','_elecRate','_waterPrev','_waterCurr','_waterRate'].includes(mf)) {
+                const val = parseFloat(value);
+                tenant[mf] = isNaN(val) ? 0 : val;
+            } else {
+                tenant[mf] = value;
+            }
+            // Save to localStorage and re-render to update totals
+            saveToStorage();
+            renderTenants();
         }
 
         window.removeTenant = function(id) {
             if (!confirm('Remove this tenant?')) return;
             tenants = tenants.filter(t => t.id !== id);
+            // Also remove their bills
+            allBills = allBills.filter(b => b.tenantId !== id);
             saveToStorage(); renderTenants();
             showToast('Tenant removed', 'success');
         };
 
         function addTenant() {
-            const nt = { id: generateId(), room: String(100+tenants.length+1), name: `New Tenant ${tenants.length+1}`, billTo: '', rent: DEFAULT_RENT, elecRate: DEFAULT_ELEC_RATE, waterRate: DEFAULT_WATER_RATE, _room: String(100+tenants.length+1), _elecPrev: 0, _elecCurr: 0, _waterPrev: 0, _waterCurr: 0, _rent: DEFAULT_RENT, _billTo: '' };
+            const nt = { 
+                id: generateId(), 
+                room: String(100+tenants.length+1), 
+                name: `New Tenant ${tenants.length+1}`, 
+                billTo: '', 
+                rent: DEFAULT_RENT, 
+                elecRate: DEFAULT_ELEC_RATE, 
+                waterRate: DEFAULT_WATER_RATE, 
+                _room: String(100+tenants.length+1), 
+                _elecPrev: 0, 
+                _elecCurr: 0, 
+                _waterPrev: 0, 
+                _waterCurr: 0, 
+                _rent: DEFAULT_RENT, 
+                _billTo: '' 
+            };
             tenants.push(nt);
             saveToStorage(); renderTenants();
             showToast('New tenant added!', 'success');
         }
 
-        // ---------- Generate Bills ----------
-        function generateAllBills() {
-            const monthKey = monthSelect.value;
-            if (!monthKey) { showToast('Select a billing month.', 'error'); return; }
+        // ---------- Generate and Save Bills ----------
+        function generateBillForTenant(tenant, monthKey) {
             const [y,m] = monthKey.split('-').map(Number);
             const settings = getSettings();
             const rentDueDate = new Date(y,m-1,settings.rentDueDay);
             const utilitiesDueDate = new Date(y,m-1,settings.utilitiesDueDay);
             const rentGracePeriodEnd = new Date(y,m-1,settings.rentDueDay+settings.gracePeriodDays);
-            let generated = 0;
-            tenants.forEach(tenant => {
-                const room = tenant._room || tenant.room || '';
-                const elecPrev = tenant._elecPrev || 0; const elecCurr = tenant._elecCurr || 0;
-                const elecRate = tenant._elecRate || DEFAULT_ELEC_RATE;
-                const waterPrev = tenant._waterPrev || 0; const waterCurr = tenant._waterCurr || 0;
-                const waterRate = tenant._waterRate || DEFAULT_WATER_RATE;
-                const rent = tenant._rent || DEFAULT_RENT; const billTo = tenant._billTo || tenant.billTo || '';
-                const elecUnits = Math.max(0, elecCurr - elecPrev);
-                const elecCostRaw = elecUnits * elecRate;
-                const elecCost = roundUpElectricCost(elecCostRaw);
-                const waterUnits = Math.max(0, waterCurr - waterPrev);
-                const waterResult = getWaterBreakdown(waterUnits, waterRate);
-                const waterCost = waterResult.total;
-                const utilitiesTotal = elecCost + waterCost;
-                const overallTotal = rent + utilitiesTotal;
-                const idx = allBills.findIndex(b => b.tenantId === tenant.id && b.monthKey === monthKey);
-                const bill = { 
-                    tenantId: tenant.id, 
-                    tenantName: tenant.name, 
-                    room, 
-                    billTo, 
-                    monthKey, 
-                    monthDisplay: formatMonthDisplay(y,m), 
-                    rent, 
-                    elecPrev, 
-                    elecCurr, 
-                    elecRate, 
-                    elecUnits, 
-                    elecCost,
-                    waterPrev, 
-                    waterCurr, 
-                    waterRate, 
-                    waterUnits, 
-                    waterCost, 
-                    waterBreakdown: waterResult.breakdown, 
-                    waterMinimumApplied: waterResult.minimumApplied, 
-                    waterExcessUnits: waterResult.excessUnits, 
-                    utilitiesTotal, 
-                    overallTotal, 
-                    timestamp: new Date().toISOString(), 
-                    paymentFooter: PAYMENT_FOOTER, 
-                    rentDueDate: rentDueDate.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}), 
-                    utilitiesDueDate: utilitiesDueDate.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}), 
-                    rentGracePeriodEnd: rentGracePeriodEnd.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}), 
-                    gracePeriodDays: settings.gracePeriodDays, 
-                    rentDueDay: settings.rentDueDay, 
-                    utilitiesDueDay: settings.utilitiesDueDay, 
-                    rentHasGracePeriod: true 
-                };
-                if (idx !== -1) allBills[idx] = bill;
-                else allBills.push(bill);
-                generated++;
-            });
-            saveToStorage(); renderTenants();
-            showToast(`✅ Generated ${generated} bills for ${formatMonthDisplay(y,m)}`, 'success');
+            
+            const room = tenant._room || tenant.room || '';
+            const billTo = tenant._billTo || '';
+            const rent = tenant._rent || DEFAULT_RENT;
+            const elecPrev = tenant._elecPrev || 0; 
+            const elecCurr = tenant._elecCurr || 0;
+            const elecRate = tenant._elecRate || DEFAULT_ELEC_RATE;
+            const waterPrev = tenant._waterPrev || 0; 
+            const waterCurr = tenant._waterCurr || 0;
+            const waterRate = tenant._waterRate || DEFAULT_WATER_RATE;
+            
+            const elecUnits = Math.max(0, elecCurr - elecPrev);
+            const elecCostRaw = elecUnits * elecRate;
+            const elecCost = roundUpElectricCost(elecCostRaw);
+            
+            const waterUnits = Math.max(0, waterCurr - waterPrev);
+            const waterResult = getWaterBreakdown(waterUnits, waterRate);
+            const waterCost = waterResult.total;
+            const utilitiesTotal = elecCost + waterCost;
+            const overallTotal = rent + utilitiesTotal;
+            
+            return {
+                tenantId: tenant.id,
+                tenantName: tenant.name,
+                room,
+                billTo,
+                monthKey,
+                monthDisplay: formatMonthDisplay(y,m),
+                rent,
+                elecPrev,
+                elecCurr,
+                elecRate,
+                elecUnits,
+                elecCost,
+                waterPrev,
+                waterCurr,
+                waterRate,
+                waterUnits,
+                waterCost,
+                waterBreakdown: waterResult.breakdown,
+                waterMinimumApplied: waterResult.minimumApplied,
+                waterExcessUnits: waterResult.excessUnits,
+                utilitiesTotal,
+                overallTotal,
+                timestamp: new Date().toISOString(),
+                paymentFooter: PAYMENT_FOOTER,
+                rentDueDate: rentDueDate.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}),
+                utilitiesDueDate: utilitiesDueDate.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}),
+                rentGracePeriodEnd: rentGracePeriodEnd.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}),
+                gracePeriodDays: settings.gracePeriodDays,
+                rentDueDay: settings.rentDueDay,
+                utilitiesDueDay: settings.utilitiesDueDay,
+                rentHasGracePeriod: true
+            };
         }
 
-        function saveAllBills() {
+        function generateAndSaveAllBills() {
             const monthKey = monthSelect.value;
             if (!monthKey) { showToast('Select a billing month.', 'error'); return; }
-            generateAllBills();
-            const monthBills = allBills.filter(b => b.monthKey === monthKey);
-            showToast(`✅ Saved ${monthBills.length} bills for ${formatMonthDisplay(...monthKey.split('-').map(Number))}`, 'success');
+            const [y,m] = monthKey.split('-').map(Number);
+            
+            // First, save all current tenant data
+            saveToStorage();
+            
+            let generated = 0;
+            let updated = 0;
+            
+            tenants.forEach(tenant => {
+                const bill = generateBillForTenant(tenant, monthKey);
+                const idx = allBills.findIndex(b => b.tenantId === tenant.id && b.monthKey === monthKey);
+                if (idx !== -1) {
+                    allBills[idx] = bill;
+                    updated++;
+                } else {
+                    allBills.push(bill);
+                    generated++;
+                }
+            });
+            
+            saveToStorage();
+            renderTenants();
+            showToast(`✅ Generated ${generated} new bills and updated ${updated} existing bills for ${formatMonthDisplay(y,m)}`, 'success');
         }
 
         // ---------- Render History ----------
         function renderHistory() {
-            if (!allBills.length) { historyBody.innerHTML = `<tr><td colspan="8" class="empty-state">No bills saved yet</td></tr>`; return; }
+            if (!allBills.length) { 
+                historyBody.innerHTML = `<tr><td colspan="8" class="empty-state">No bills saved yet</td></tr>`; 
+                return; 
+            }
             const sorted = [...allBills].sort((a,b) => b.monthKey.localeCompare(a.monthKey) || (a.tenantName||'').localeCompare(b.tenantName||''));
             let html = '';
             sorted.forEach(b => {
@@ -506,7 +610,7 @@
             historyBody.innerHTML = html;
         }
 
-        // ---------- PDF generation ----------
+        // ---------- PDF generation (unchanged) ----------
         function generateBillHTML(bill, display, copyType) {
             const roomDisplay = bill.room || 'N/A';
             const copyColor = copyType === "TENANT'S COPY" ? '#1a3d6b' : '#8B0000';
@@ -858,7 +962,7 @@
                     if (!data.tenants || !data.bills) { showToast('Invalid data format.', 'error'); return; }
                     if (!confirm(`This will replace all current data with ${data.tenants.length} tenants and ${data.bills.length} bills. Proceed?`)) return;
                     tenants = data.tenants.map(t => {
-                        return { ...t, _room: t._room || t.room || '', _elecPrev: t._elecPrev || 0, _elecCurr: t._elecCurr || 0, _elecRate: t._elecRate || t.elecRate || DEFAULT_ELEC_RATE, _waterPrev: t._waterPrev || 0, _waterCurr: t._waterCurr || 0, _waterRate: t._waterRate || t.waterRate || DEFAULT_WATER_RATE, _rent: t._rent || t.rent || DEFAULT_RENT, _billTo: t._billTo || t.billTo || '' };
+                        return { ...t, _room: t._room || t.room || '', _elecPrev: t._elecPrev !== undefined ? t._elecPrev : 0, _elecCurr: t._elecCurr !== undefined ? t._elecCurr : 0, _elecRate: t._elecRate || t.elecRate || DEFAULT_ELEC_RATE, _waterPrev: t._waterPrev !== undefined ? t._waterPrev : 0, _waterCurr: t._waterCurr !== undefined ? t._waterCurr : 0, _waterRate: t._waterRate || t.waterRate || DEFAULT_WATER_RATE, _rent: t._rent || t.rent || DEFAULT_RENT, _billTo: t._billTo || t.billTo || '' };
                     });
                     allBills = data.bills || [];
                     saveToStorage();
@@ -873,18 +977,35 @@
         }
 
         // ---------- Event Listeners ----------
-        monthSelect.addEventListener('change', function() { if (this.value) { currentMonthKey=this.value; updateMonthDisplay(); updateMonthReference(); loadMonthForAll(this.value); } });
-        loadBtn.addEventListener('click', function() { const key=monthSelect.value; if(key) loadMonthForAll(key); });
-        generateAllBtn.addEventListener('click', generateAllBills);
-        saveAllBtn.addEventListener('click', saveAllBills);
+        monthSelect.addEventListener('change', function() { 
+            if (this.value) { 
+                currentMonthKey=this.value; 
+                updateMonthDisplay(); 
+                updateMonthReference(); 
+                loadMonthForAll(this.value); 
+            } 
+        });
+        loadBtn.addEventListener('click', function() { 
+            const key=monthSelect.value; 
+            if(key) loadMonthForAll(key); 
+        });
+        generateAllBtn.addEventListener('click', generateAndSaveAllBills);
         addTenantBtn.addEventListener('click', addTenant);
         pdfAllBtn.addEventListener('click', exportAllPDFs);
         clearAllBtn.addEventListener('click', clearAll);
         exportDataBtn.addEventListener('click', exportData);
-        importFileInput.addEventListener('change', function(e) { if (this.files && this.files[0]) { importData(this.files[0]); this.value = ''; } });
+        importFileInput.addEventListener('change', function(e) { 
+            if (this.files && this.files[0]) { 
+                importData(this.files[0]); 
+                this.value = ''; 
+            } 
+        });
         rentDueDayInput.addEventListener('change', saveSettings);
         utilitiesDueDayInput.addEventListener('change', saveSettings);
-        gracePeriodDaysInput.addEventListener('input', function() { updateGracePeriodDisplay(); saveSettings(); });
+        gracePeriodDaysInput.addEventListener('input', function() { 
+            updateGracePeriodDisplay(); 
+            saveSettings(); 
+        });
 
         // ---------- Init ----------
         populateMonthDropdown();
