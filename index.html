@@ -1333,7 +1333,10 @@
                         </div>
                         
                         <div class="received-section">
-                            <p style="font-size:0.8rem;"><strong>Received by:</strong> ____________________ &nbsp;&nbsp;&nbsp; <strong>Date:</strong> ____________________</p>
+                            <div style="display:flex;align-items:flex-end;gap:28px;font-size:0.8rem;">
+                                <div style="flex:1 1 62%;display:flex;align-items:flex-end;gap:8px;"><strong style="white-space:nowrap;">Received by:</strong><span style="flex:1;height:1.4em;border-bottom:1px solid #333;"></span></div>
+                                <div style="flex:0 0 34%;display:flex;align-items:flex-end;gap:8px;"><strong style="white-space:nowrap;">Date:</strong><span style="flex:1;height:1.4em;border-bottom:1px solid #333;"></span></div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1506,7 +1509,6 @@
                     .received-section {
                         margin-top: 20px;
                         padding-top: 10px;
-                        border-top: 1px dashed #999;
                     }
                     .received-section p { font-size: 0.9rem; margin: 4px 0; }
                     
