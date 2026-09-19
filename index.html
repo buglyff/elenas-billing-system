@@ -1,3 +1,4 @@
+```
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -304,6 +305,25 @@
             font-family: inherit; font-weight:600;
         }
         .setting-group input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(14,124,134,0.13); }
+        .advance-group { grid-column: 1 / -1; }
+        .advance-head { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; justify-content: space-between; }
+        .advance-hint { font-size: 0.68rem; color: var(--faint); line-height: 1.4; margin-top: 0.2rem; text-transform: none; letter-spacing: 0; font-weight: 500; }
+        .advance-list { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.3rem; }
+        .advance-row {
+            display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;
+            background: #fff; border: 1px solid var(--line); border-left: 3px solid var(--brand);
+            border-radius: 10px; padding: 0.5rem 0.7rem;
+        }
+        .advance-row select {
+            padding: 0.4rem 0.6rem; border: 1.5px solid var(--line); border-radius: 8px; font-size: 0.8rem;
+            background: white; color: var(--ink); font-family: inherit; font-weight: 600; min-width: 200px; outline: none;
+        }
+        .advance-row select:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(14,124,134,0.13); }
+        .advance-months { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+        .advance-month { display: flex; align-items: center; gap: 0.25rem; }
+        .advance-month input { width: 165px; }
+        .advance-month .btn, .advance-row .btn { padding: 0.35rem 0.6rem; }
+        .advance-empty { font-size: 0.75rem; color: var(--faint); padding: 0.2rem 0; text-transform: none; letter-spacing: 0; font-weight: 500; }
         .grace-period-note {
             grid-column: 1 / -1; background: var(--gold-tint); padding: 0.6rem 0.9rem; border-radius: 9px;
             border-left: 3px solid var(--gold); font-size: 0.78rem; color: #7a5a1c; line-height:1.5;
@@ -458,7 +478,19 @@
             <div class="setting-group"><label><i class="fas fa-calendar-check"></i> Rent Due Date</label><input type="number" id="rentDueDay" min="1" max="31" value="1" /></div>
             <div class="setting-group"><label><i class="fas fa-bolt"></i> Utilities Due Date</label><input type="number" id="utilitiesDueDay" min="1" max="31" value="5" /></div>
             <div class="setting-group"><label><i class="fas fa-hourglass-half"></i> Rent Grace Period (days)</label><input type="number" id="gracePeriodDays" min="0" max="30" value="2" /></div>
-            <div class="setting-group"><label><i class="fas fa-calendar-alt"></i> Billing Month Reference</label><input type="text" id="billingMonthRef" value="Current Month" readonly style="background:#f0f4f9; font-weight:500;" /></div>
+            <div class="setting-group"><label><i class="fas fa-calendar-day"></i> Statement Header Date</label><input type="date" id="statementHeaderDate" /></div>
+            <div class="setting-group"><label><i class="fas fa-calendar-alt"></i> Rent Month &amp; Year</label><input type="month" id="rentMonthYear" title="Shown beside RENT on the PDF for every tenant. Leave blank to use the selected billing month." /></div>
+            <div class="setting-group"><label><i class="fas fa-bolt"></i> Utilities Date Range</label><div style="display:flex;gap:6px;align-items:center;"><input type="date" id="descriptionDateFrom" style="flex:1;" /><span>to</span><input type="date" id="descriptionDateTo" style="flex:1;" /></div></div>
+            <div class="setting-group advance-group">
+                <div class="advance-head">
+                    <div>
+                        <label><i class="fas fa-forward"></i> Advance Rent Months (per tenant)</label>
+                        <div class="advance-hint">Only for tenants who pay rent in advance. Their extra months are added beside RENT on their PDF; all other tenants show the Rent Month &amp; Year above.</div>
+                    </div>
+                    <button type="button" class="btn btn-outline btn-sm" id="addAdvanceBtn"><i class="fas fa-plus"></i> Add Tenant Advance Payment</button>
+                </div>
+                <div class="advance-list" id="advanceList"></div>
+            </div>
             <div class="grace-period-note"><i class="fas fa-info-circle"></i> <strong>Grace Period Policy:</strong> <span class="highlight">Rent</span> payments received within <span id="gracePeriodDisplay">2</span> day(s) after the rent due date will not incur late fees. <strong>Utilities</strong> (electricity & water) are due on their specified date with <strong>no grace period</strong>.</div>
         </div>
 
@@ -583,7 +615,14 @@
         const utilitiesDueDayInput = document.getElementById('utilitiesDueDay');
         const gracePeriodDaysInput = document.getElementById('gracePeriodDays');
         const gracePeriodDisplay = document.getElementById('gracePeriodDisplay');
-        const billingMonthRef = document.getElementById('billingMonthRef');
+        const statementHeaderDateInput = document.getElementById('statementHeaderDate');
+        const rentMonthYearInput = document.getElementById('rentMonthYear');
+        const advanceList = document.getElementById('advanceList');
+        const addAdvanceBtn = document.getElementById('addAdvanceBtn');
+        let advanceRent = [];        // [{ tenantId, months: ['YYYY-MM', ...] }] - extra (advance) months per tenant
+        let advanceTenantSig = '';
+        const descriptionDateFromInput = document.getElementById('descriptionDateFrom');
+        const descriptionDateToInput = document.getElementById('descriptionDateTo');
         const loadBtn = document.getElementById('loadMonthBtn');
         const generateAllBtn = document.getElementById('generateAllBtn');
         const addTenantBtn = document.getElementById('addTenantBtn');
@@ -646,7 +685,16 @@
 
         // ---------- Settings ----------
         function getSettings() {
-            return { rentDueDay: parseInt(rentDueDayInput.value) || 1, utilitiesDueDay: parseInt(utilitiesDueDayInput.value) || 5, gracePeriodDays: parseInt(gracePeriodDaysInput.value) || 2 };
+            return {
+                rentDueDay: parseInt(rentDueDayInput.value) || 1,
+                utilitiesDueDay: parseInt(utilitiesDueDayInput.value) || 5,
+                gracePeriodDays: parseInt(gracePeriodDaysInput.value) || 2,
+                statementHeaderDate: statementHeaderDateInput.value || '',
+                rentMonthYear: rentMonthYearInput.value || '',
+                advanceRent: getAdvanceRentClean(),
+                utilitiesDescriptionDateFrom: descriptionDateFromInput.value || '',
+                utilitiesDescriptionDateTo: descriptionDateToInput.value || ''
+            };
         }
         function saveSettings() {
             localStorage.setItem('elenasApartmentSettings', JSON.stringify(getSettings()));
@@ -654,20 +702,182 @@
         }
         function loadSettings() {
             const stored = localStorage.getItem('elenasApartmentSettings');
-            if (stored) try { const s = JSON.parse(stored); if (s.rentDueDay) rentDueDayInput.value = s.rentDueDay; if (s.utilitiesDueDay) utilitiesDueDayInput.value = s.utilitiesDueDay; if (s.gracePeriodDays) gracePeriodDaysInput.value = s.gracePeriodDays; } catch(e) {}
-            updateGracePeriodDisplay(); updateMonthReference();
+            if (stored) try {
+                const s = JSON.parse(stored);
+                if (s.rentDueDay) rentDueDayInput.value = s.rentDueDay;
+                if (s.utilitiesDueDay) utilitiesDueDayInput.value = s.utilitiesDueDay;
+                if (s.gracePeriodDays) gracePeriodDaysInput.value = s.gracePeriodDays;
+                if (s.statementHeaderDate) statementHeaderDateInput.value = s.statementHeaderDate;
+                if (s.rentMonthYear) rentMonthYearInput.value = s.rentMonthYear;
+                else if (Array.isArray(s.rentMonths) && s.rentMonths.length) rentMonthYearInput.value = cleanMonthList(s.rentMonths)[0] || '';
+                if (Array.isArray(s.advanceRent)) {
+                    advanceRent = s.advanceRent.filter(r => r && r.tenantId).map(r => ({
+                        tenantId: r.tenantId,
+                        months: Array.isArray(r.months) && r.months.length ? r.months.slice() : ['']
+                    }));
+                }
+                if (s.utilitiesDescriptionDateFrom) descriptionDateFromInput.value = s.utilitiesDescriptionDateFrom;
+                else if (s.rentDescriptionDateFrom) descriptionDateFromInput.value = s.rentDescriptionDateFrom;
+                if (s.utilitiesDescriptionDateTo) descriptionDateToInput.value = s.utilitiesDescriptionDateTo;
+                else if (s.rentDescriptionDateTo) descriptionDateToInput.value = s.rentDescriptionDateTo;
+            } catch(e) {}
+            if (!statementHeaderDateInput.value) {
+                statementHeaderDateInput.value = new Date().toISOString().slice(0,10);
+            }
+            renderAdvanceRows();
+            updateGracePeriodDisplay();
+        }
+        // ---------- Advance rent months (per tenant) ----------
+        function cleanMonthList(arr) {
+            return [...new Set((arr || []).filter(v => /^\d{4}-\d{2}$/.test(v)))].sort();
+        }
+        function nextMonthAfter(key) {
+            let [y, m] = key.split('-').map(Number);
+            m += 1; if (m > 12) { m = 1; y += 1; }
+            return getMonthKey(y, m);
+        }
+        function tenantLabel(t) {
+            const room = t._room || t.room || '';
+            return (room ? room + ' \u2013 ' : '') + (t.name || 'Unnamed tenant');
+        }
+        function getAdvanceRentClean() {
+            return advanceRent
+                .filter(r => r.tenantId)
+                .map(r => ({ tenantId: r.tenantId, months: cleanMonthList(r.months) }))
+                .filter(r => r.months.length);
+        }
+        function pruneAdvanceRent() {
+            const ids = new Set(tenants.map(t => t.id));
+            const before = advanceRent.length;
+            advanceRent = advanceRent.filter(r => !r.tenantId || ids.has(r.tenantId));
+            return advanceRent.length !== before;
+        }
+        function tenantSignature() { return tenants.map(t => t.id + '|' + tenantLabel(t)).join('~'); }
+        function refreshAdvanceRows() {
+            if (tenantSignature() !== advanceTenantSig) renderAdvanceRows();
+        }
+        function suggestAdvanceMonth(existing) {
+            const base = rentMonthYearInput.value || monthSelect.value || '';
+            const all = cleanMonthList([base, ...existing]);
+            return all.length ? nextMonthAfter(all[all.length - 1]) : '';
+        }
+        function renderAdvanceRows() {
+            if (!advanceList) return;
+            advanceTenantSig = tenantSignature();
+            advanceList.innerHTML = '';
+            if (!advanceRent.length) {
+                const empty = document.createElement('div');
+                empty.className = 'advance-empty';
+                empty.textContent = 'No advance payments. Every tenant shows just the Rent Month & Year.';
+                advanceList.appendChild(empty);
+                return;
+            }
+            advanceRent.forEach((row, ri) => {
+                const wrap = document.createElement('div');
+                wrap.className = 'advance-row';
+
+                const sel = document.createElement('select');
+                sel.setAttribute('aria-label', 'Tenant paying in advance');
+                const ph = document.createElement('option');
+                ph.value = ''; ph.textContent = 'Select tenant';
+                sel.appendChild(ph);
+                const usedElsewhere = new Set(advanceRent.filter((r, i) => i !== ri).map(r => r.tenantId));
+                tenants.forEach(t => {
+                    const o = document.createElement('option');
+                    o.value = t.id; o.textContent = tenantLabel(t);
+                    if (usedElsewhere.has(t.id)) o.disabled = true;
+                    sel.appendChild(o);
+                });
+                sel.value = row.tenantId || '';
+                sel.addEventListener('change', function() { row.tenantId = sel.value; renderAdvanceRows(); saveSettings(); });
+                wrap.appendChild(sel);
+
+                const monthsBox = document.createElement('div');
+                monthsBox.className = 'advance-months';
+                row.months.forEach((mv, mi) => {
+                    const item = document.createElement('div');
+                    item.className = 'advance-month';
+                    const input = document.createElement('input');
+                    input.type = 'month'; input.value = mv || '';
+                    input.setAttribute('aria-label', 'Advance rent month ' + (mi + 1));
+                    input.addEventListener('change', function() { row.months[mi] = input.value; saveSettings(); });
+                    item.appendChild(input);
+                    if (row.months.length > 1) {
+                        const rm = document.createElement('button');
+                        rm.type = 'button'; rm.className = 'btn btn-danger-outline btn-sm';
+                        rm.title = 'Remove this month';
+                        rm.setAttribute('aria-label', 'Remove advance month ' + (mi + 1));
+                        rm.innerHTML = '<i class="fas fa-times"></i>';
+                        rm.addEventListener('click', function() { row.months.splice(mi, 1); renderAdvanceRows(); saveSettings(); });
+                        item.appendChild(rm);
+                    }
+                    monthsBox.appendChild(item);
+                });
+                wrap.appendChild(monthsBox);
+
+                const addM = document.createElement('button');
+                addM.type = 'button'; addM.className = 'btn btn-outline btn-sm';
+                addM.innerHTML = '<i class="fas fa-plus"></i> Month';
+                addM.addEventListener('click', function() {
+                    row.months.push(suggestAdvanceMonth(row.months));
+                    renderAdvanceRows(); saveSettings();
+                });
+                wrap.appendChild(addM);
+
+                const del = document.createElement('button');
+                del.type = 'button'; del.className = 'btn btn-danger-outline btn-sm';
+                del.title = 'Remove this tenant from advance payments';
+                del.setAttribute('aria-label', 'Remove advance payment row');
+                del.style.marginLeft = 'auto';
+                del.innerHTML = '<i class="fas fa-trash-alt"></i>';
+                del.addEventListener('click', function() { advanceRent.splice(ri, 1); renderAdvanceRows(); saveSettings(); });
+                wrap.appendChild(del);
+
+                advanceList.appendChild(wrap);
+            });
+        }
+        function addAdvanceRow() {
+            if (!tenants.length) { showToast('Add a tenant first.', 'error'); return; }
+            const used = new Set(advanceRent.map(r => r.tenantId));
+            const free = tenants.find(t => !used.has(t.id));
+            if (!free) { showToast('Every tenant already has an advance payment row.', 'error'); return; }
+            advanceRent.push({ tenantId: free.id, months: [suggestAdvanceMonth([])] });
+            renderAdvanceRows(); saveSettings();
         }
         function updateGracePeriodDisplay() { gracePeriodDisplay.textContent = parseInt(gracePeriodDaysInput.value) || 2; }
-        function updateMonthReference() {
-            const val = monthSelect.value;
-            if (val) { const [y,m] = val.split('-').map(Number); const d = new Date(y,m-1,1); billingMonthRef.value = d.toLocaleString('default',{month:'long',year:'numeric'}); }
-        }
 
         // ---------- Helpers ----------
         function formatCurrency(amount) { return '₱' + Number(amount).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
         function formatNumber(num) { return Number(num).toFixed(1).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
         function getMonthKey(y,m) { return `${y}-${String(m).padStart(2,'0')}`; }
         function formatMonthDisplay(y,m) { const d = new Date(y,m-1,1); return d.toLocaleString('default',{month:'long',year:'numeric'}); }
+        function formatCustomDate(value) {
+            if (!value) return '';
+            const parts = value.split('-').map(Number);
+            if (parts.length !== 3 || parts.some(Number.isNaN)) return value;
+            const d = new Date(parts[0], parts[1]-1, parts[2]);
+            return d.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+        }
+        function formatRentMonths(bill) {
+            let list = Array.isArray(bill.rentMonths) && bill.rentMonths.length ? bill.rentMonths : [bill.rentMonthYear || bill.monthKey];
+            list = cleanMonthList(list);
+            if (!list.length) return '';
+            // The year is printed once, after the last month of each year (e.g. "October, November & December 2026")
+            const tokens = list.map((key, i) => {
+                const [y, m] = key.split('-').map(Number);
+                const name = new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long' });
+                const nextYear = i < list.length - 1 ? Number(list[i + 1].split('-')[0]) : null;
+                return nextYear === y ? name : `${name} ${y}`;
+            });
+            if (tokens.length === 1) return tokens[0];
+            return tokens.slice(0, -1).join(', ') + ' & ' + tokens[tokens.length - 1];
+        }
+        function formatCustomDateRange(from, to) {
+            const start = formatCustomDate(from);
+            const end = formatCustomDate(to);
+            if (start && end) return `${start} to ${end}`;
+            return start || end || '';
+        }
         function generateId() { return Date.now().toString(36) + Math.random().toString(36).substr(2,5); }
         function calculateWaterCost(units, rate) { if (units <= WATER_FREE_UNITS) return WATER_MINIMUM_CHARGE; return WATER_MINIMUM_CHARGE + ((units - WATER_FREE_UNITS) * rate); }
         function getWaterBreakdown(units, rate) {
@@ -714,7 +924,7 @@
             if ([...monthSelect.options].some(o=>o.value===def)) monthSelect.value = def;
             else monthSelect.value = monthSelect.options[0].value;
             currentMonthKey = monthSelect.value;
-            updateMonthDisplay(); updateMonthReference();
+            updateMonthDisplay();
         }
         function updateMonthDisplay() {
             const val = monthSelect.value;
@@ -722,7 +932,6 @@
             currentMonthKey = val;
             const [y,m] = val.split('-').map(Number);
             currentMonthDisplay.textContent = formatMonthDisplay(y,m);
-            updateMonthReference();
         }
 
         // ---------- Storage ----------
@@ -794,12 +1003,14 @@
                     tenant._room = tenant.room || '';
                 }
             });
-            renderTenants(); updateMonthDisplay(); updateMonthReference();
+            renderTenants(); updateMonthDisplay();
             showToast(`Loaded ${tenants.length} tenants for ${formatMonthDisplay(y,m)}`, 'success');
         }
 
         // ---------- Render Tenants ----------
         function renderTenants() {
+            if (pruneAdvanceRent()) saveSettings();
+            refreshAdvanceRows();
             if (!tenants.length) {
                 tenantsBody.innerHTML = `<tr><td colspan="15" class="empty-state"><i class="fas fa-user-plus"></i>No tenants added yet. Click &ldquo;Add Tenant&rdquo; to start.</td></tr>`;
                 summaryFooter.style.display = 'none'; tenantCount.textContent = '0 tenants'; return;
@@ -941,6 +1152,9 @@
             const utilitiesDueDate = new Date(y,m-1,settings.utilitiesDueDay);
             const rentGracePeriodEnd = new Date(y,m-1,settings.rentDueDay+settings.gracePeriodDays);
             
+            const advance = (settings.advanceRent || []).find(a => a.tenantId === tenant.id);
+            const rentMonthsForTenant = cleanMonthList([settings.rentMonthYear || monthKey, ...(advance ? advance.months : [])]);
+
             const room = tenant._room || tenant.room || '';
             const billTo = tenant._billTo || '';
             const rent = tenant._rent || DEFAULT_RENT;
@@ -992,6 +1206,10 @@
                 gracePeriodDays: settings.gracePeriodDays,
                 rentDueDay: settings.rentDueDay,
                 utilitiesDueDay: settings.utilitiesDueDay,
+                statementHeaderDate: settings.statementHeaderDate || new Date().toISOString().slice(0,10),
+                rentMonths: rentMonthsForTenant,
+                utilitiesDescriptionDateFrom: settings.utilitiesDescriptionDateFrom || `${y}-${String(m).padStart(2,'0')}-${String(settings.utilitiesDueDay).padStart(2,'0')}`,
+                utilitiesDescriptionDateTo: settings.utilitiesDescriptionDateTo || `${y}-${String(m).padStart(2,'0')}-${String(settings.utilitiesDueDay).padStart(2,'0')}`,
                 rentHasGracePeriod: true
             };
         }
@@ -1065,7 +1283,7 @@
                             <div class="bill-branding-text">
                                 <h1>ELENA'S APARTMENT</h1>
                                 <h2>Monthly Billing Statement</h2>
-                                <h3>${bill.monthDisplay||display}</h3>
+                                                                <div style="margin-top:3px;font-size:1.2rem;color:#6f7785;">Date: ${formatCustomDate(bill.statementHeaderDate)}</div>
                             </div>
                         </div>
                         <div style="text-align:right;margin-bottom:2px;">
@@ -1083,21 +1301,21 @@
                         <div class="due-item"><span><strong>💰 RENT DUE DATE:</strong></span><span class="fw-bold" style="color:#101a2e;">${bill.rentDueDate||'—'}</span></div>
                         <div class="due-item"><span><strong>⏳ Rent Grace Period:</strong></span><span class="grace-note">${bill.gracePeriodDays||2} day(s) until ${bill.rentGracePeriodEnd||'—'}</span></div>
                         <hr class="section-divider">
-                        <div class="due-item"><span><strong>⚡ UTILITIES DUE DATE:</strong></span><span class="fw-bold text-danger">${bill.utilitiesDueDate||'—'} <span class="text-muted" style="font-size:0.65rem;">(no grace period)</span></span></div>
-                        <div style="margin-top:4px;font-size:0.7rem;color:#856404;border-top:1px dashed #e0c78a;padding-top:4px;"><i class="fas fa-info-circle"></i> <strong>Rent</strong> has a grace period of ${bill.gracePeriodDays} day(s). <strong>Utilities</strong> are due on the specified date with no grace period.</div>
+                        <div class="due-item"><span><strong>⚡ UTILITIES DUE DATE:</strong></span><span class="fw-bold text-danger">${bill.utilitiesDueDate||'—'}</span></div>
+                        <div style="margin-top:4px;font-size:0.7rem;color:#856404;border-top:1px dashed #e0c78a;padding-top:4px;"><i class="fas fa-info-circle"></i> <strong>Rent</strong> has a grace period of ${bill.gracePeriodDays} day(s). <strong>Utilities</strong> are due on the specified date.</div>
                     </div>
                     
                     <table>
                         <tr><th style="width:70%;">Description</th><th style="width:30%;text-align:right;">Amount</th></tr>
                         <tr class="rent-total-row">
-                            <td style="font-size:1rem;color:#101a2e;"><strong>💰 RENT</strong><br><span class="text-muted" style="font-size:0.65rem;">Due: ${bill.rentDueDate} (grace until ${bill.rentGracePeriodEnd})</span></td>
+                            <td style="font-size:1rem;color:#101a2e;"><strong>💰 RENT</strong> <span style="font-size:inherit;font-weight:500;color:#000;">— ${formatRentMonths(bill)}</span><br><span class="text-muted" style="font-size:0.65rem;">Due: ${bill.rentDueDate} (grace until ${bill.rentGracePeriodEnd})</span></td>
                             <td style="text-align:right;font-size:1rem;color:#101a2e;"><strong>${formatCurrency(bill.rent)}</strong></td>
                         </tr>
-                        <tr class="utilities-header-row"><td colspan="2" style="font-size:0.9rem;color:#101a2e;padding-top:10px;"><strong>⚡ UTILITIES:</strong></td></tr>
+                        <tr class="utilities-header-row"><td colspan="2" style="font-size:0.9rem;color:#101a2e;padding-top:10px;"><strong>⚡ UTILITIES</strong> <span style="font-size:inherit;font-weight:500;color:#000;">— ${formatCustomDateRange(bill.utilitiesDescriptionDateFrom,bill.utilitiesDescriptionDateTo)}</span></td></tr>
                         <tr class="elec-row"><td style="font-weight:500;color:#0e7c86;">Electricity</td><td class="amount">${formatCurrency(bill.elecCost)}</td></tr>
                         <tr class="water-row"><td style="font-weight:500;color:#0e7c86;">Water</td><td class="amount">${formatCurrency(bill.waterCost)}</td></tr>
                         <tr class="utilities-total-row">
-                            <td style="font-size:0.95rem;color:#101a2e;"><strong>⚡ UTILITIES TOTAL</strong><br><span class="text-muted text-danger" style="font-size:0.6rem;">Due: ${bill.utilitiesDueDate} (no grace period)</span></td>
+                            <td style="font-size:0.95rem;color:#101a2e;"><strong>⚡ UTILITIES TOTAL</strong><br><span class="text-muted text-danger" style="font-size:0.6rem;">Due: ${bill.utilitiesDueDate}</span></td>
                             <td style="text-align:right;font-size:0.95rem;color:#101a2e;"><strong>${formatCurrency(bill.utilitiesTotal)}</strong></td>
                         </tr>
                     </table>
@@ -1117,7 +1335,6 @@
                         <div class="received-section">
                             <p style="font-size:0.8rem;"><strong>Received by:</strong> ____________________ &nbsp;&nbsp;&nbsp; <strong>Date:</strong> ____________________</p>
                         </div>
-                        <p style="margin-top:6px;font-size:0.55rem;color:#888;text-align:center;">Generated: ${new Date().toLocaleString()}</p>
                     </div>
                 </div>
             </div>`;
@@ -1176,8 +1393,8 @@
                         margin-bottom: 8px;
                     }
                     .bill-logo {
-                        width: 78px;
-                        height: 78px;
+                        width: 140px;
+                        height: 140px;
                         object-fit: contain;
                         flex-shrink: 0;
                     }
@@ -1452,7 +1669,6 @@
             if (this.value) { 
                 currentMonthKey=this.value; 
                 updateMonthDisplay(); 
-                updateMonthReference(); 
                 loadMonthForAll(this.value); 
             } 
         });
@@ -1461,6 +1677,7 @@
             if(key) loadMonthForAll(key); 
         });
         generateAllBtn.addEventListener('click', generateAndSaveAllBills);
+        addAdvanceBtn.addEventListener('click', addAdvanceRow);
         addTenantBtn.addEventListener('click', addTenant);
         pdfAllBtn.addEventListener('click', exportAllPDFs);
         clearAllBtn.addEventListener('click', clearAll);
@@ -1470,6 +1687,9 @@
                 handleLogoUpload(this.files[0]);
                 this.value = '';
             }
+        });
+        [rentDueDayInput, utilitiesDueDayInput, gracePeriodDaysInput, statementHeaderDateInput, rentMonthYearInput, descriptionDateFromInput, descriptionDateToInput].forEach(input => {
+            input.addEventListener('change', saveSettings);
         });
         removeLogoBtn.addEventListener('click', function() {
             billingLogoDataUrl = DEFAULT_LOGO_DATA_URL;
@@ -1502,3 +1722,4 @@
 </script>
 </body>
 </html>
+```
