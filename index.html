@@ -494,6 +494,17 @@
             <div class="grace-period-note"><i class="fas fa-info-circle"></i> <strong>Grace Period Policy:</strong> <span class="highlight">Rent</span> payments received within <span id="gracePeriodDisplay">2</span> day(s) after the rent due date will not incur late fees. <strong>Utilities</strong> (electricity & water) are due on their specified date with <strong>no grace period</strong>.</div>
         </div>
 
+        <div class="billing-settings" style="margin-top:0.8rem;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));">
+            <div style="grid-column:1/-1;">
+                <div class="logo-settings-title"><i class="fas fa-signature"></i> Tenant's Copy Signatories</div>
+                <div class="logo-settings-hint">Shown at the bottom of the Tenant's Copy PDF, printed below the Approved by / Prepared by lines. Leave a field blank to keep that part empty. The Owner's Copy is not affected.</div>
+            </div>
+            <div class="setting-group"><label><i class="fas fa-user-check"></i> Approved by &mdash; Name</label><input type="text" id="approvedByName" placeholder="Full name" maxlength="60" autocomplete="off" /></div>
+            <div class="setting-group"><label><i class="fas fa-id-badge"></i> Approved by &mdash; Designation</label><input type="text" id="approvedByTitle" placeholder="e.g. Owner" maxlength="60" autocomplete="off" /></div>
+            <div class="setting-group"><label><i class="fas fa-user-edit"></i> Prepared by &mdash; Name</label><input type="text" id="preparedByName" placeholder="Full name" maxlength="60" autocomplete="off" /></div>
+            <div class="setting-group"><label><i class="fas fa-id-badge"></i> Prepared by &mdash; Designation</label><input type="text" id="preparedByTitle" placeholder="e.g. Property Manager" maxlength="60" autocomplete="off" /></div>
+        </div>
+
         <div class="logo-settings">
             <div class="logo-preview-wrap">
                 <img id="logoPreview" class="logo-preview" alt="Billing logo preview">
@@ -623,6 +634,10 @@
         let advanceTenantSig = '';
         const descriptionDateFromInput = document.getElementById('descriptionDateFrom');
         const descriptionDateToInput = document.getElementById('descriptionDateTo');
+        const approvedByNameInput = document.getElementById('approvedByName');
+        const approvedByTitleInput = document.getElementById('approvedByTitle');
+        const preparedByNameInput = document.getElementById('preparedByName');
+        const preparedByTitleInput = document.getElementById('preparedByTitle');
         const loadBtn = document.getElementById('loadMonthBtn');
         const generateAllBtn = document.getElementById('generateAllBtn');
         const addTenantBtn = document.getElementById('addTenantBtn');
@@ -693,7 +708,11 @@
                 rentMonthYear: rentMonthYearInput.value || '',
                 advanceRent: getAdvanceRentClean(),
                 utilitiesDescriptionDateFrom: descriptionDateFromInput.value || '',
-                utilitiesDescriptionDateTo: descriptionDateToInput.value || ''
+                utilitiesDescriptionDateTo: descriptionDateToInput.value || '',
+                approvedByName: approvedByNameInput.value.trim(),
+                approvedByTitle: approvedByTitleInput.value.trim(),
+                preparedByName: preparedByNameInput.value.trim(),
+                preparedByTitle: preparedByTitleInput.value.trim()
             };
         }
         function saveSettings() {
@@ -720,6 +739,10 @@
                 else if (s.rentDescriptionDateFrom) descriptionDateFromInput.value = s.rentDescriptionDateFrom;
                 if (s.utilitiesDescriptionDateTo) descriptionDateToInput.value = s.utilitiesDescriptionDateTo;
                 else if (s.rentDescriptionDateTo) descriptionDateToInput.value = s.rentDescriptionDateTo;
+                if (s.approvedByName) approvedByNameInput.value = s.approvedByName;
+                if (s.approvedByTitle) approvedByTitleInput.value = s.approvedByTitle;
+                if (s.preparedByName) preparedByNameInput.value = s.preparedByName;
+                if (s.preparedByTitle) preparedByTitleInput.value = s.preparedByTitle;
             } catch(e) {}
             if (!statementHeaderDateInput.value) {
                 statementHeaderDateInput.value = new Date().toISOString().slice(0,10);
@@ -1268,6 +1291,28 @@
             return billingLogoDataUrl || DEFAULT_LOGO_DATA_URL;
         }
 
+        function escHtml(str) {
+            return String(str == null ? '' : str).replace(/[&<>"']/g, function(c) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+            });
+        }
+
+        // One signature column (label + line, with optional name/designation printed below the line)
+        function signatureColumnHTML(label, name, title) {
+            const details = (name || title) ? `
+                <span></span>
+                <div style="text-align:center;padding-top:3px;line-height:1.25;">
+                    ${name ? `<div style="font-weight:700;font-size:0.8rem;">${escHtml(name)}</div>` : ''}
+                    ${title ? `<div style="font-size:0.68rem;color:#555;">${escHtml(title)}</div>` : ''}
+                </div>` : '';
+            return `
+                <div style="flex:1 1 0;min-width:0;display:grid;grid-template-columns:auto 1fr;column-gap:8px;align-items:end;">
+                    <strong style="white-space:nowrap;display:inline-block;width:8em;">${label}</strong>
+                    <span style="height:1.4em;border-bottom:1px solid #333;"></span>
+                    ${details}
+                </div>`;
+        }
+
         function generateBillHTML(bill, display, copyType) {
             const roomDisplay = bill.room || 'N/A';
             const copyColor = copyType === "TENANT'S COPY" ? '#101a2e' : '#9c3226';
@@ -1293,7 +1338,7 @@
                     
                     <div class="bill-details">
                         <p style="font-size:0.95rem;"><span class="room-badge"><strong>${roomDisplay}</strong></span></p>
-                        <p><strong>Tenant:</strong> ${bill.tenantName||'N/A'}</p>
+                        <p><strong>Prop/Rep:</strong> ${bill.tenantName||'N/A'}</p>
                         <p><strong>Bill To:</strong> ${bill.billTo||'N/A'}</p>
                     </div>
                     
@@ -1329,14 +1374,21 @@
                             <p><strong>Payment Instructions:</strong></p>
                             <p style="font-size:0.7rem;">📝 Please make all check payable to <strong>Evergino M. Ocampo, Sr.</strong></p>
                             <p style="font-size:0.7rem;">🏦 BDO Ormoc Branch / Current Acct.: <strong>004910084153</strong> &nbsp;|&nbsp; 📱 Gcash: <strong>0946 293 9879</strong></p>
-                            <p style="font-size:0.7rem;">📞 Concerns: <strong>0938 308 6966 / 0916 651 4977</strong></p>
+                            <p style="font-size:0.7rem;">📞 Concerns: <strong>0938 308 6966 / 0916 651 4977 / 0966 413 2964</strong></p>
                         </div>
                         
                         <div class="received-section">
+                            ${copyType === "TENANT'S COPY" ? `
+                            <div style="display:flex;align-items:flex-start;gap:28px;font-size:0.8rem;">
+                                ${signatureColumnHTML('Approved by:', approvedByNameInput.value.trim(), approvedByTitleInput.value.trim())}
+                                ${signatureColumnHTML('Prepared by:', preparedByNameInput.value.trim(), preparedByTitleInput.value.trim())}
+                            </div>
+                            ` : `
                             <div style="display:flex;align-items:flex-end;gap:28px;font-size:0.8rem;">
                                 <div style="flex:1 1 62%;display:flex;align-items:flex-end;gap:8px;"><strong style="white-space:nowrap;">Received by:</strong><span style="flex:1;height:1.4em;border-bottom:1px solid #333;"></span></div>
                                 <div style="flex:0 0 34%;display:flex;align-items:flex-end;gap:8px;"><strong style="white-space:nowrap;">Date:</strong><span style="flex:1;height:1.4em;border-bottom:1px solid #333;"></span></div>
                             </div>
+                            `}
                         </div>
                     </div>
                 </div>
@@ -1627,6 +1679,12 @@
                 tenants,
                 bills: allBills,
                 billingLogo: billingLogoDataUrl || DEFAULT_LOGO_DATA_URL,
+                signatories: {
+                    approvedByName: approvedByNameInput.value.trim(),
+                    approvedByTitle: approvedByTitleInput.value.trim(),
+                    preparedByName: preparedByNameInput.value.trim(),
+                    preparedByTitle: preparedByTitleInput.value.trim()
+                },
                 version: '1.1',
                 exportedAt: new Date().toISOString()
             };
@@ -1654,6 +1712,13 @@
                     if (data.billingLogo) {
                         billingLogoDataUrl = data.billingLogo;
                         saveLogo();
+                    }
+                    if (data.signatories) {
+                        approvedByNameInput.value = data.signatories.approvedByName || '';
+                        approvedByTitleInput.value = data.signatories.approvedByTitle || '';
+                        preparedByNameInput.value = data.signatories.preparedByName || '';
+                        preparedByTitleInput.value = data.signatories.preparedByTitle || '';
+                        saveSettings();
                     }
                     saveToStorage();
                     renderTenants();
@@ -1692,6 +1757,9 @@
         });
         [rentDueDayInput, utilitiesDueDayInput, gracePeriodDaysInput, statementHeaderDateInput, rentMonthYearInput, descriptionDateFromInput, descriptionDateToInput].forEach(input => {
             input.addEventListener('change', saveSettings);
+        });
+        [approvedByNameInput, approvedByTitleInput, preparedByNameInput, preparedByTitleInput].forEach(input => {
+            input.addEventListener('input', saveSettings);
         });
         removeLogoBtn.addEventListener('click', function() {
             billingLogoDataUrl = DEFAULT_LOGO_DATA_URL;
