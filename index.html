@@ -545,7 +545,13 @@
             </div>
             <div class="toolbar-group" style="margin-left:auto;">
                 <button class="btn btn-outline btn-sm" id="addTenantBtn"><i class="fas fa-user-plus"></i> Add Tenant</button>
-                <button class="btn btn-primary btn-sm" id="pdfAllBtn"><i class="fas fa-file-pdf"></i> Export All PDFs</button>
+                <span class="toolbar-label"><i class="fas fa-file-pdf"></i> PDF type</span>
+                <select id="pdfTypeSelect" class="month-select" aria-label="PDF type" title="Choose what appears on the exported PDFs">
+                    <option value="full">Rent + Utilities</option>
+                    <option value="rent">Rent only</option>
+                    <option value="utilities">Utilities only</option>
+                </select>
+                <button class="btn btn-primary btn-sm" id="pdfAllBtn"><i class="fas fa-file-pdf"></i> <span id="pdfAllBtnLabel">Export All PDFs</span></button>
                 <button class="btn btn-danger-outline btn-sm" id="clearAllBtn"><i class="fas fa-trash-alt"></i> Clear All</button>
             </div>
         </div>
@@ -642,6 +648,8 @@
         const generateAllBtn = document.getElementById('generateAllBtn');
         const addTenantBtn = document.getElementById('addTenantBtn');
         const pdfAllBtn = document.getElementById('pdfAllBtn');
+        const pdfAllBtnLabel = document.getElementById('pdfAllBtnLabel');
+        const pdfTypeSelect = document.getElementById('pdfTypeSelect');
         const clearAllBtn = document.getElementById('clearAllBtn');
         const exportDataBtn = document.getElementById('exportDataBtn');
         const importFileInput = document.getElementById('importFileInput');
@@ -1313,21 +1321,28 @@
                 </div>`;
         }
 
-        function generateBillHTML(bill, display, copyType) {
+        // mode: 'full' (rent + utilities), 'rent' (rent only) or 'utilities' (utilities only)
+        function generateBillHTML(bill, display, copyType, mode) {
+            mode = mode || 'full';
+            const showRent = mode !== 'utilities';
+            const showUtilities = mode !== 'rent';
+            const statementTitle = mode === 'rent' ? 'Monthly Rent Statement'
+                                 : mode === 'utilities' ? 'Monthly Utilities Statement'
+                                 : 'Monthly Billing Statement';
             const roomDisplay = bill.room || 'N/A';
             const copyColor = copyType === "TENANT'S COPY" ? '#101a2e' : '#9c3226';
             const copyBg = copyType === "TENANT'S COPY" ? '#e6f4f4' : '#fbe9e7';
             const copyBorder = copyType === "TENANT'S COPY" ? '#101a2e' : '#9c3226';
             
             return `
-            <div class="bill-page">
+            <div class="bill-page mode-${mode}">
                 <div class="bill-container">
                     <div class="bill-header">
                         <div class="bill-branding">
                             <img src="${getBillingLogo()}" alt="Elena's Apartment Logo" class="bill-logo">
                             <div class="bill-branding-text">
                                 <h1>ELENA'S APARTMENT</h1>
-                                <h2>Monthly Billing Statement</h2>
+                                <h2>${statementTitle}</h2>
                                                                 <div style="margin-top:3px;font-size:1.2rem;color:#6f7785;">Date: ${formatCustomDate(bill.statementHeaderDate)}</div>
                             </div>
                         </div>
@@ -1343,19 +1358,32 @@
                     </div>
                     
                     <div class="due-dates">
+                        ${showRent ? `
                         <div class="due-item"><span><strong>💰 RENT DUE DATE:</strong></span><span class="fw-bold" style="color:#101a2e;">${bill.rentDueDate||'—'}</span></div>
                         <div class="due-item"><span><strong>⏳ Rent Grace Period:</strong></span><span class="grace-note">${bill.gracePeriodDays||2} day(s) until ${bill.rentGracePeriodEnd||'—'}</span></div>
-                        <hr class="section-divider">
+                        ` : ''}
+                        ${showRent && showUtilities ? `<hr class="section-divider">` : ''}
+                        ${showUtilities ? `
                         <div class="due-item"><span><strong>⚡ UTILITIES DUE DATE:</strong></span><span class="fw-bold text-danger">${bill.utilitiesDueDate||'—'}</span></div>
-                        <div style="margin-top:4px;font-size:0.7rem;color:#856404;border-top:1px dashed #e0c78a;padding-top:4px;"><i class="fas fa-info-circle"></i> <strong>Rent</strong> has a grace period of ${bill.gracePeriodDays} day(s). <strong>Utilities</strong> are due on the specified date.</div>
+                        ` : ''}
+                        <div style="margin-top:4px;font-size:0.7rem;color:#856404;border-top:1px dashed #e0c78a;padding-top:4px;"><i class="fas fa-info-circle"></i> ${
+                            mode === 'rent'
+                                ? `<strong>Rent</strong> has a grace period of ${bill.gracePeriodDays} day(s).`
+                                : mode === 'utilities'
+                                    ? `<strong>Utilities</strong> are due on the specified date, with no grace period.`
+                                    : `<strong>Rent</strong> has a grace period of ${bill.gracePeriodDays} day(s). <strong>Utilities</strong> are due on the specified date.`
+                        }</div>
                     </div>
                     
                     <table>
                         <tr><th style="width:70%;">Description</th><th style="width:30%;text-align:right;">Amount</th></tr>
+                        ${showRent ? `
                         <tr class="rent-total-row">
                             <td style="font-size:1rem;color:#101a2e;"><strong>💰 RENT</strong> <span style="font-size:inherit;font-weight:500;color:#000;">— ${formatRentMonths(bill)}</span><br><span class="text-muted" style="font-size:0.65rem;">Due: ${bill.rentDueDate} (grace until ${bill.rentGracePeriodEnd})</span></td>
                             <td style="text-align:right;font-size:1rem;color:#101a2e;"><strong>${formatCurrency(bill.rent)}</strong></td>
                         </tr>
+                        ` : ''}
+                        ${showUtilities ? `
                         <tr class="utilities-header-row"><td colspan="2" style="font-size:0.9rem;color:#101a2e;padding-top:10px;"><strong>⚡ UTILITIES</strong> <span style="font-size:inherit;font-weight:500;color:#000;">— ${formatCustomDateRange(bill.utilitiesDescriptionDateFrom,bill.utilitiesDescriptionDateTo)}</span></td></tr>
                         <tr class="elec-row"><td style="font-weight:500;color:#0e7c86;">Electricity</td><td class="amount">${formatCurrency(bill.elecCost)}</td></tr>
                         <tr class="water-row"><td style="font-weight:500;color:#0e7c86;">Water</td><td class="amount">${formatCurrency(bill.waterCost)}</td></tr>
@@ -1363,12 +1391,15 @@
                             <td style="font-size:0.95rem;color:#101a2e;"><strong>⚡ UTILITIES TOTAL</strong><br><span class="text-muted text-danger" style="font-size:0.6rem;">Due: ${bill.utilitiesDueDate}</span></td>
                             <td style="text-align:right;font-size:0.95rem;color:#101a2e;"><strong>${formatCurrency(bill.utilitiesTotal)}</strong></td>
                         </tr>
+                        ` : ''}
                     </table>
                     
                     <div class="footer">
+                        ${showUtilities ? `
                         <p><strong>Meter Readings:</strong></p>
                         <p style="font-size:0.75rem;">Electricity: ${bill.elecPrev} → ${bill.elecCurr} (<span class="elec-unit">${bill.elecUnits.toFixed(1)} kWh</span> used) &nbsp;|&nbsp; Water: ${bill.waterPrev} → ${bill.waterCurr} (${bill.waterUnits.toFixed(1)} m³ used)</p>
                         <p class="water-note" style="font-size:0.65rem;">Water billing: First 10 m³ = ₱300 minimum</p>
+                        ` : ''}
                         
                         <div class="payment-note">
                             <p><strong>Payment Instructions:</strong></p>
@@ -1395,7 +1426,21 @@
             </div>`;
         }
 
+        const PDF_MODE_LABELS = {
+            full:      { button: 'Export All PDFs',        doc: 'Billing Statements',   toast: 'bills' },
+            rent:      { button: 'Export Rent PDFs',       doc: 'Rent Statements',      toast: 'rent statements' },
+            utilities: { button: 'Export Utilities PDFs',  doc: 'Utilities Statements', toast: 'utilities statements' }
+        };
+        function getPdfMode() {
+            const v = pdfTypeSelect ? pdfTypeSelect.value : 'full';
+            return PDF_MODE_LABELS[v] ? v : 'full';
+        }
+        function updatePdfButtonLabel() {
+            pdfAllBtnLabel.textContent = PDF_MODE_LABELS[getPdfMode()].button;
+        }
+
         function exportAllPDFs() {
+            const mode = getPdfMode();
             const monthKey = monthSelect.value;
             if (!monthKey) { showToast('Select a month first.', 'error'); return; }
             const monthBills = allBills.filter(b => b.monthKey === monthKey);
@@ -1403,7 +1448,10 @@
             const [y,m] = monthKey.split('-').map(Number);
             const display = formatMonthDisplay(y,m);
             
-            let allContent = `<html><head><title>Elena's Apartment - Billing Statements</title>
+            const docTitle = mode === 'full'
+                ? `Elena's Apartment - Billing Statements`
+                : `Elena's Apartment - ${PDF_MODE_LABELS[mode].doc} - ${display}`;
+            let allContent = `<html><head><title>${docTitle}</title>
                 <meta charset="UTF-8">
                 <style>
                     /* Reset for print */
@@ -1582,6 +1630,34 @@
                     .text-danger { color: #dc3545; }
                     .fw-bold { font-weight: 700; }
                     .section-divider { border: none; border-top: 1.5px dashed #dde5ed; margin: 6px 0; }
+
+                    /* ---- Rent-only / Utilities-only: scale content up and spread it evenly so the page is filled ---- */
+                    .mode-rent .footer, .mode-utilities .footer { margin-top: 0 !important; }
+                    .mode-rent .bill-details, .mode-utilities .bill-details { padding: 16px 24px; margin: 12px 0; font-size: 1.1rem; }
+                    .mode-rent .bill-details p, .mode-utilities .bill-details p { margin: 8px 0; }
+                    .mode-rent .room-badge, .mode-utilities .room-badge { font-size: 1.2rem !important; padding: 6px 26px !important; }
+                    .mode-rent .due-dates, .mode-utilities .due-dates { padding: 16px 22px; margin: 14px 0; font-size: 1.05rem; }
+                    .mode-rent .due-dates .due-item, .mode-utilities .due-dates .due-item { padding: 6px 0; }
+                    .mode-rent .due-dates > div:last-child, .mode-utilities .due-dates > div:last-child { font-size: 0.8rem !important; margin-top: 8px !important; padding-top: 8px !important; }
+                    .mode-rent table, .mode-utilities table { margin: 14px 0; font-size: 0.95rem; }
+                    .mode-rent th, .mode-utilities th { padding: 10px 14px; font-size: 0.8rem; }
+                    .mode-rent td, .mode-utilities td { padding: 8px 14px; }
+                    .mode-rent .footer { font-size: 0.95rem; padding-top: 18px; }
+                    .mode-rent .footer .payment-note { padding: 14px 18px; font-size: 0.9rem; }
+                    .mode-rent .footer .payment-note p { font-size: 0.85rem !important; margin: 4px 0; }
+                    .mode-rent .received-section { margin-top: 26px; }
+                    /* Rent-only: the single RENT row becomes the focal point */
+                    .mode-rent .rent-total-row td { padding: 20px 18px; font-size: 1.15rem !important; }
+                    .mode-rent .rent-total-row td .text-muted { font-size: 0.7rem !important; }
+                    /* Utilities-only: slightly tighter, since it also carries the meter readings */
+                    .mode-utilities .bill-details p { margin: 6px 0; }
+                    .mode-utilities .due-dates { padding: 14px 22px; }
+                    .mode-utilities .due-dates .due-item { padding: 4px 0; }
+                    .mode-utilities th { padding: 10px 14px; }
+                    .mode-utilities .utilities-header-row td { padding: 10px 14px 5px 14px; font-size: 0.95rem !important; }
+                    .mode-utilities .elec-row td, .mode-utilities .water-row td { padding: 7px 14px 7px 28px; font-size: 0.9rem !important; }
+                    .mode-utilities .utilities-total-row td { padding: 11px 14px; font-size: 1rem !important; }
+                    .mode-utilities .utilities-total-row td .text-muted { font-size: 0.7rem !important; }
                     
                     @page {
                         margin: 0;
@@ -1642,8 +1718,8 @@
             </head><body>`;
             
             monthBills.forEach(bill => {
-                allContent += generateBillHTML(bill, display, "TENANT'S COPY");
-                allContent += generateBillHTML(bill, display, "OWNER'S COPY");
+                allContent += generateBillHTML(bill, display, "TENANT'S COPY", mode);
+                allContent += generateBillHTML(bill, display, "OWNER'S COPY", mode);
             });
             
             allContent += `<script>
@@ -1661,7 +1737,7 @@
             }
             win.document.write(allContent);
             win.document.close();
-            showToast(`Opened ${monthBills.length} bills (Tenant+Owner copies on separate pages)`, 'success');
+            showToast(`Opened ${monthBills.length} ${PDF_MODE_LABELS[mode].toast} (Tenant+Owner copies on separate pages)`, 'success');
         }
 
         // ---------- Clear ----------
@@ -1747,6 +1823,7 @@
         addAdvanceBtn.addEventListener('click', addAdvanceRow);
         addTenantBtn.addEventListener('click', addTenant);
         pdfAllBtn.addEventListener('click', exportAllPDFs);
+        pdfTypeSelect.addEventListener('change', updatePdfButtonLabel);
         clearAllBtn.addEventListener('click', clearAll);
         exportDataBtn.addEventListener('click', exportData);
         logoFileInput.addEventListener('change', function(e) {
