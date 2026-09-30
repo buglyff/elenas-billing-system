@@ -1,4 +1,3 @@
-```
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -459,6 +458,52 @@
             display: block;
             line-height: 1.1;
         }
+            /* ---------- Acknowledgement receipts ---------- */
+        .col-actions { width: 72px !important; min-width: 64px !important; max-width: 80px !important; }
+        .row-actions { display:flex; flex-direction:column; align-items:center; gap:4px; }
+        .row-actions .badge { font-size:.55rem; padding:.1rem .45rem; }
+        .btn-receipt-row { padding:0.12rem 0.35rem !important; font-size:0.6rem !important; }
+        .receipt-check { width:16px; height:16px; accent-color: var(--brand); cursor:pointer; }
+        .rc-actions-cell { white-space:nowrap; text-align:right; }
+        .rc-actions-cell .btn { padding:.25rem .55rem; font-size:.68rem; }
+        .rc-sub { display:block; font-size:.68rem; color:var(--muted); font-weight:500; }
+
+        .ack-overlay { position:fixed; inset:0; background:rgba(15,23,42,.55); display:none; align-items:flex-start;
+            justify-content:center; padding:2vh 1rem; z-index:1000; overflow-y:auto; backdrop-filter:blur(2px); }
+        .ack-overlay.show { display:flex; }
+        .ack-modal { background:#fff; border-radius:var(--radius-lg); width:100%; max-width:1180px; box-shadow:0 24px 60px -12px rgba(15,23,42,.45);
+            overflow:hidden; margin:auto 0; }
+        .ack-modal-head { display:flex; align-items:center; justify-content:space-between; padding:1rem 1.4rem;
+            background:linear-gradient(180deg,var(--navy-soft),var(--navy)); color:#fff; position:relative; }
+        .ack-modal-head::after { content:''; position:absolute; inset:auto 0 0 0; height:3px; background:linear-gradient(90deg,var(--brand),var(--gold)); }
+        .ack-modal-title { font-size:1.05rem; font-weight:700; display:flex; align-items:center; gap:.6rem; }
+        .ack-modal-title i { color:var(--gold); }
+        .ack-x { background:none; border:none; color:#fff; font-size:1.6rem; line-height:1; cursor:pointer; opacity:.75; }
+        .ack-x:hover { opacity:1; }
+        .ack-body { display:grid; grid-template-columns: minmax(340px,430px) 1fr; gap:1.4rem; padding:1.2rem 1.4rem; }
+        .ack-grid { display:grid; grid-template-columns:1fr 1fr; gap:.75rem .8rem; align-content:start; }
+        .ack-full { grid-column:1/-1; }
+        .ack-field { display:flex; flex-direction:column; gap:.3rem; min-width:0; }
+        .ack-field > label { font-size:.66rem; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+        .ack-field input[type=text], .ack-field input[type=number], .ack-field input[type=date], .ack-field select {
+            width:100%; padding:.5rem .65rem; border:1px solid var(--line); border-radius:var(--radius-sm); font:inherit; font-size:.85rem;
+            color:var(--ink); background:#fff; outline:none; }
+        .ack-field input:focus, .ack-field select:focus { border-color:var(--brand); box-shadow:0 0 0 3px rgba(14,124,134,.13); }
+        .ack-inline { display:flex; gap:.4rem; }
+        .ack-inline input { flex:1; min-width:0; }
+        .ack-total { background:var(--brand-tint); border:1px solid #cfe7e8; border-radius:var(--radius-sm); padding:.5rem .65rem;
+            font-weight:800; color:var(--brand-dark); font-size:.95rem; }
+        .ack-check { display:flex; align-items:center; gap:.5rem; font-size:.82rem; color:var(--body); cursor:pointer; }
+        .ack-check input { width:16px; height:16px; accent-color:var(--brand); }
+        .ack-preview { min-width:0; }
+        .ack-preview-label { font-size:.66rem; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:.5rem; }
+        .ack-preview-stage { background:#eef1f6; border:1px solid var(--line); border-radius:var(--radius); padding:0; overflow:hidden; position:relative; }
+        #ackPreviewInner { width:816px; transform-origin:top left; }
+        #ackPreviewInner .rc-half { width:816px; height:528px; flex:none; background:#fff; }
+        .ack-hint { font-size:.72rem; color:var(--muted); margin-top:.6rem; }
+        .ack-foot { display:flex; justify-content:flex-end; gap:.6rem; flex-wrap:wrap; padding:1rem 1.4rem; border-top:1px solid var(--line-soft); background:#fafbfd; }
+        @media (max-width: 900px) { .ack-body { grid-template-columns:1fr; } }
+        @media (max-width: 480px) { .ack-grid { grid-template-columns:1fr; } }
     </style>
 </head>
 <body>
@@ -594,6 +639,36 @@
         <div class="callout"><i class="fas fa-info-circle"></i> <strong>Water Billing:</strong> First 10 m³ = ₱300 minimum, excess charged at rate</div>
     </div>
 
+    <!-- Acknowledgement Receipts -->
+    <div class="card" id="receiptsCard">
+        <div class="card-title"><i class="fas fa-receipt"></i> Acknowledgement Receipts <span class="badge-count" id="receiptCount">0 receipts</span>
+            <span style="margin-left: auto; font-size: 0.78rem; font-weight: 500; color: var(--faint);"><i class="fas fa-info-circle"></i> When a tenant pays their utilities, click the receipt button on their row above</span>
+        </div>
+        <div class="toolbar">
+            <div class="toolbar-group">
+                <span class="toolbar-label"><i class="fas fa-filter"></i> Show</span>
+                <select id="receiptScope" class="month-select" aria-label="Receipts to show">
+                    <option value="month">Selected month</option>
+                    <option value="all">All months</option>
+                </select>
+            </div>
+            <div class="toolbar-group" style="margin-left:auto;">
+                <button class="btn btn-success btn-sm" id="newReceiptBtn"><i class="fas fa-plus"></i> New Receipt</button>
+                <button class="btn btn-outline btn-sm" id="printSelectedReceiptsBtn"><i class="fas fa-print"></i> Print Selected</button>
+                <button class="btn btn-primary btn-sm" id="printAllReceiptsBtn"><i class="fas fa-file-pdf"></i> Print All Shown</button>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table style="min-width:860px;">
+                <thead><tr>
+                    <th style="width:34px;text-align:center;"><input type="checkbox" class="receipt-check" id="receiptCheckAll" aria-label="Select all receipts" /></th>
+                    <th>Date</th><th>Room</th><th>Received From</th><th style="text-align:right;">Amount</th><th>Payment Method</th><th>Bill Period</th><th style="text-align:right;">Actions</th>
+                </tr></thead>
+                <tbody id="receiptsBody"><tr><td colspan="8" class="empty-state"><i class="fas fa-receipt"></i>No receipts yet</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
     <!-- History -->
     <div class="card">
         <div class="card-title"><i class="fas fa-history"></i> Billing History</div>
@@ -601,6 +676,54 @@
             <table><thead><tr><th>Month</th><th>Room</th><th>Tenant</th><th>Bill To</th><th>Rent</th><th>Elec</th><th>Water</th><th>Total</th></tr></thead>
                 <tbody id="historyBody"><tr><td colspan="8" class="empty-state"><i class="fas fa-file-invoice-dollar"></i>No bills saved yet</td></tr></tbody>
             </table>
+        </div>
+    </div>
+</div>
+
+<!-- Acknowledgement Receipt Modal -->
+<div class="ack-overlay" id="ackOverlay" role="dialog" aria-modal="true" aria-labelledby="ackTitleText">
+    <div class="ack-modal">
+        <div class="ack-modal-head">
+            <div class="ack-modal-title"><i class="fas fa-receipt"></i> <span id="ackTitleText">Acknowledgement of Payment</span></div>
+            <button type="button" class="ack-x" id="ackClose" aria-label="Close">&times;</button>
+        </div>
+        <div class="ack-body">
+            <div class="ack-grid">
+                <div class="ack-field ack-full"><label for="ackTenant">Tenant</label><select id="ackTenant"></select></div>
+                <div class="ack-field"><label for="ackDate">Date received</label><input type="date" id="ackDate" /></div>
+                <div class="ack-field"><label for="ackMethod">Payment method</label>
+                    <select id="ackMethod">
+                        <option value="Cash">Cash</option>
+                        <option value="Check">Check</option>
+                        <option value="GCash">GCash</option>
+                        <option value="Bank Transfer">Bank deposit / transfer</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div class="ack-field ack-full"><label for="ackFrom">Received from</label><input type="text" id="ackFrom" maxlength="120" autocomplete="off" placeholder="Name of payer" /></div>
+                <div class="ack-field"><label for="ackDue">Utilities bill due (₱)</label><input type="number" id="ackDue" step="0.01" min="0" /></div>
+                <div class="ack-field"><label for="ackPenalty">Late penalty (₱)</label>
+                    <div class="ack-inline"><input type="number" id="ackPenalty" step="0.01" min="0" value="0" /><button type="button" class="btn btn-outline btn-sm" id="ackPenalty5" title="Set penalty to 5% of the bill due">5%</button></div>
+                </div>
+                <div class="ack-field ack-full"><label>Total amount received</label><div class="ack-total" id="ackTotal">₱0.00</div></div>
+                <div class="ack-field" id="ackRefWrap"><label for="ackRef" id="ackRefLabel">Check No.</label><input type="text" id="ackRef" maxlength="60" autocomplete="off" /></div>
+                <div class="ack-field" id="ackBankWrap"><label for="ackBank" id="ackBankLabel">Bank</label><input type="text" id="ackBank" maxlength="80" autocomplete="off" /></div>
+                <div class="ack-field ack-full"><label class="ack-check"><input type="checkbox" id="ackWords" /> Show the amount in words (usually for checks)</label></div>
+                <div class="ack-field"><label for="ackPeriodFrom">Bill period &mdash; from</label><input type="date" id="ackPeriodFrom" /></div>
+                <div class="ack-field"><label for="ackPeriodTo">Bill period &mdash; to</label><input type="date" id="ackPeriodTo" /></div>
+                <div class="ack-field"><label for="ackRecvBy">Received by</label><input type="text" id="ackRecvBy" maxlength="80" autocomplete="off" /></div>
+                <div class="ack-field"><label for="ackRecvOrg">Position / business</label><input type="text" id="ackRecvOrg" maxlength="80" autocomplete="off" /></div>
+            </div>
+            <div class="ack-preview">
+                <div class="ack-preview-label">Preview &mdash; Tenant's Copy</div>
+                <div class="ack-preview-stage" id="ackStage"><div id="ackPreviewInner"></div></div>
+                <div class="ack-hint"><i class="fas fa-info-circle"></i> Printing produces the Tenant's Copy and the Owner's Copy together on one Letter page.</div>
+            </div>
+        </div>
+        <div class="ack-foot">
+            <button type="button" class="btn btn-outline" id="ackCancel">Cancel</button>
+            <button type="button" class="btn btn-outline" id="ackSave"><i class="fas fa-save"></i> Save Receipt</button>
+            <button type="button" class="btn btn-primary" id="ackSavePrint"><i class="fas fa-print"></i> Save &amp; Print</button>
         </div>
     </div>
 </div>
@@ -665,6 +788,7 @@
         // ---------- State ----------
         let tenants = [];
         let allBills = [];
+        let payments = [];   // acknowledgement receipts
         let currentMonthKey = '';
         let saveTimeout = null;
 
@@ -969,7 +1093,7 @@
         function loadFromStorage() {
             const stored = localStorage.getItem(STORAGE_KEY);
             if (stored) {
-                try { const data = JSON.parse(stored); tenants = data.tenants || []; allBills = data.bills || []; } catch(e) { tenants=[]; allBills=[]; }
+                try { const data = JSON.parse(stored); tenants = data.tenants || []; allBills = data.bills || []; payments = Array.isArray(data.payments) ? data.payments : []; } catch(e) { tenants=[]; allBills=[]; payments=[]; }
             } else {
                 tenants = [
                     { id: generateId(), room: '101', name: 'Maria Santos', billTo: 'Santos Family', rent: 15000, elecRate: 12, waterRate: 30 },
@@ -996,8 +1120,9 @@
             renderTenants(); renderHistory();
         }
         function saveToStorage() {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify({ tenants, bills: allBills }));
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({ tenants, bills: allBills, payments }));
             renderHistory();
+            renderReceipts();
             showSavedIndicator();
         }
 
@@ -1104,7 +1229,7 @@
                         <span class="water-breakdown">${waterResult.breakdown}</span>
                     </td>
                     <td class="col-total" style="text-align:right;padding-right:8px;font-weight:800;">${formatCurrency(total)}</td>
-                    <td class="col-actions" style="text-align:center;"><button class="btn btn-danger btn-sm" onclick="removeTenant('${tenant.id}')" style="padding:0.12rem 0.35rem;font-size:0.6rem;"><i class="fas fa-trash"></i></button></td>
+                    <td class="col-actions" style="text-align:center;"><div class="row-actions"><button class="btn btn-success btn-sm btn-receipt-row" onclick="openReceiptModal('${tenant.id}')" title="Utilities paid? Record payment & print acknowledgement receipt"><i class="fas fa-receipt"></i></button><button class="btn btn-danger btn-sm" onclick="removeTenant('${tenant.id}')" style="padding:0.12rem 0.35rem;font-size:0.6rem;"><i class="fas fa-trash"></i></button>${paymentStatusBadge(tenant.id, monthKey, elecCost + waterCost)}</div></td>
                 </tr>`;
             });
             tenantsBody.innerHTML = html;
@@ -1740,11 +1865,406 @@
             showToast(`Opened ${monthBills.length} ${PDF_MODE_LABELS[mode].toast} (Tenant+Owner copies on separate pages)`, 'success');
         }
 
+        // ---------- Acknowledgement Receipts ----------
+        const RECEIPT_DEFAULTS_KEY = 'elenasApartmentReceiptDefaults';
+        const receiptsBody = document.getElementById('receiptsBody');
+        const receiptCount = document.getElementById('receiptCount');
+        const receiptScope = document.getElementById('receiptScope');
+        const receiptCheckAll = document.getElementById('receiptCheckAll');
+        const ackOverlay = document.getElementById('ackOverlay');
+        const ackStage = document.getElementById('ackStage');
+        const ackPreviewInner = document.getElementById('ackPreviewInner');
+        const ackEl = {
+            tenant: document.getElementById('ackTenant'), date: document.getElementById('ackDate'),
+            method: document.getElementById('ackMethod'), from: document.getElementById('ackFrom'),
+            due: document.getElementById('ackDue'), penalty: document.getElementById('ackPenalty'),
+            total: document.getElementById('ackTotal'), ref: document.getElementById('ackRef'),
+            refWrap: document.getElementById('ackRefWrap'), refLabel: document.getElementById('ackRefLabel'),
+            bank: document.getElementById('ackBank'), bankWrap: document.getElementById('ackBankWrap'),
+            bankLabel: document.getElementById('ackBankLabel'), words: document.getElementById('ackWords'),
+            pFrom: document.getElementById('ackPeriodFrom'), pTo: document.getElementById('ackPeriodTo'),
+            recvBy: document.getElementById('ackRecvBy'), recvOrg: document.getElementById('ackRecvOrg')
+        };
+        let editingReceiptId = null;
+        let modalCtx = { monthKey: '', room: '', tenantName: '', createdAt: '' };
+        const selectedReceipts = new Set();
+
+        // Same look as the Acknowledgement of Payment PDF (Tenant's Copy on top, Owner's Copy below)
+        const RECEIPT_CSS = `
+            .rc-page { width:100%; height:100vh; display:flex; flex-direction:column; page-break-after:always; break-after:page; background:#fff; }
+            .rc-page:last-child { page-break-after:avoid; break-after:auto; }
+            .rc-half { flex:1 1 0; min-height:0; padding:0.5in 0.8in 0.25in 0.9in; box-sizing:border-box; overflow:hidden;
+                font-family:Arial,Helvetica,sans-serif; color:#000; background:#fff; }
+            .rc-half + .rc-half { border-top:1px solid #6b6b6b; }
+            .rc-head { display:flex; align-items:center; gap:0.2in; margin-bottom:0.38in; }
+            .rc-logo { width:1.45in; height:1.45in; object-fit:contain; flex:none; }
+            .rc-titles { flex:1; text-align:center; }
+            .rc-title { color:#0b2a66; font-weight:700; font-size:20pt; line-height:1.15; }
+            .rc-copy { color:#c00000; font-weight:700; font-style:italic; font-size:15pt; margin-top:0.14in; }
+            .rc-row { display:flex; align-items:baseline; margin-bottom:0.15in; }
+            .rc-l { flex:none; width:1.85in; color:#0b2a66; font-weight:700; font-size:12pt; }
+            .rc-v { flex:1; min-width:0; font-family:Calibri,Carlito,'Segoe UI',Arial,sans-serif; font-size:12.5pt; text-decoration:underline; }
+            .rc-v .rc-words { font-size:9pt; }
+            .rc-v.rc-period { font-style:italic; }
+            .rc-sign { display:flex; justify-content:flex-end; align-items:flex-start; gap:0.35in; margin-top:0.32in; padding-right:0.3in; }
+            .rc-rb { font-family:Calibri,Carlito,'Segoe UI',Arial,sans-serif; font-style:italic; font-size:12.5pt; }
+            .rc-sig { display:flex; flex-direction:column; align-items:center; }
+            .rc-name { font-weight:700; text-decoration:underline; font-size:12pt; }
+            .rc-org { font-family:Calibri,Carlito,'Segoe UI',Arial,sans-serif; font-size:12.5pt; }
+        `;
+        (function injectReceiptCss() {
+            const st = document.createElement('style');
+            st.textContent = RECEIPT_CSS;
+            document.head.appendChild(st);
+        })();
+
+        function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+        function todayLocal() {
+            const d = new Date();
+            return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+        }
+        function loadReceiptDefaults() {
+            const base = { receivedBy: 'Michael Adrian Ocampo', receivedByOrg: "Elena's Apartment", method: 'Cash' };
+            try { return Object.assign(base, JSON.parse(localStorage.getItem(RECEIPT_DEFAULTS_KEY) || '{}')); }
+            catch (e) { return base; }
+        }
+        function saveReceiptDefaults(p) {
+            try { localStorage.setItem(RECEIPT_DEFAULTS_KEY, JSON.stringify({ receivedBy: p.receivedBy, receivedByOrg: p.receivedByOrg, method: p.method })); } catch (e) {}
+        }
+
+        // 3433 -> "Three Thousand Four Hundred Thirty-Three Pesos Only"
+        function numberToWords(n) {
+            const ones = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+            const tens = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+            function below1000(x) {
+                let out = '';
+                if (x >= 100) { out += ones[Math.floor(x/100)] + ' Hundred'; x %= 100; if (x) out += ' '; }
+                if (x >= 20) { out += tens[Math.floor(x/10)]; if (x % 10) out += '-' + ones[x % 10]; }
+                else if (x > 0) out += ones[x];
+                return out;
+            }
+            if (n === 0) return 'Zero';
+            const parts = [];
+            [[1e9,'Billion'],[1e6,'Million'],[1e3,'Thousand']].forEach(([v, name]) => {
+                if (n >= v) { parts.push(below1000(Math.floor(n / v)) + ' ' + name); n %= v; }
+            });
+            if (n > 0) parts.push(below1000(n));
+            return parts.join(' ');
+        }
+        function pesoWords(amount) {
+            const cents = Math.round(amount * 100);
+            const pesos = Math.floor(cents / 100), c = cents % 100;
+            let out = numberToWords(pesos) + (pesos === 1 ? ' Peso' : ' Pesos');
+            if (c) out += ' and ' + String(c).padStart(2, '0') + '/100';
+            return out + ' Only';
+        }
+
+        function receiptMethodText(p) {
+            switch (p.method) {
+                case 'Check': return 'Check No. ' + (p.refNo || '__________') + (p.bank ? ' \u2013 ' + p.bank : '');
+                case 'GCash': return 'GCash' + (p.refNo ? ' \u2013 Ref. No. ' + p.refNo : '');
+                case 'Bank Transfer': return 'Bank Transfer' + (p.bank ? ' \u2013 ' + p.bank : '') + (p.refNo ? ' \u2013 Ref. No. ' + p.refNo : '');
+                case 'Other': return p.bank || p.refNo || 'Other';
+                default: return 'Cash';
+            }
+        }
+        function receiptAmountHTML(p) {
+            const total = round2((p.billDue || 0) + (p.penalty || 0));
+            let h = (p.penalty > 0)
+                ? `Bill due: ${escHtml(formatCurrency(p.billDue))} + ${escHtml(formatCurrency(p.penalty))} (Penalty) Total of <b>${escHtml(formatCurrency(total))}</b>`
+                : escHtml(formatCurrency(total));
+            if (p.showWords) h += ` <span class="rc-words">(${escHtml(pesoWords(total))})</span>`;
+            return h;
+        }
+        function receiptPeriodText(p) {
+            let range = formatCustomDateRange(p.periodFrom, p.periodTo);
+            if (p.periodFrom && p.periodFrom === p.periodTo) range = formatCustomDate(p.periodFrom);
+            return range ? 'Bill Period: ' + range : 'Bill Period:';
+        }
+        function receiptHalfHTML(p, copyLabel) {
+            return `
+            <div class="rc-half">
+                <div class="rc-head">
+                    <img class="rc-logo" src="${getBillingLogo()}" alt="Elena's Apartment Logo">
+                    <div class="rc-titles">
+                        <div class="rc-title">ACKNOWLEDGEMENT OF PAYMENT</div>
+                        <div class="rc-copy">${copyLabel}</div>
+                    </div>
+                </div>
+                <div class="rc-row"><span class="rc-l">Date:</span><span class="rc-v">${escHtml(formatCustomDate(p.date))}</span></div>
+                <div class="rc-row"><span class="rc-l">Received From:</span><span class="rc-v">${escHtml(p.receivedFrom)}</span></div>
+                <div class="rc-row"><span class="rc-l">Amount:</span><span class="rc-v">${receiptAmountHTML(p)}</span></div>
+                <div class="rc-row"><span class="rc-l">Payment Method:</span><span class="rc-v">${escHtml(receiptMethodText(p))}</span></div>
+                <div class="rc-row"><span class="rc-l">Electric &amp; Water:</span><span class="rc-v rc-period">${escHtml(receiptPeriodText(p))}</span></div>
+                <div class="rc-sign">
+                    <span class="rc-rb">Received by:</span>
+                    <span class="rc-sig"><span class="rc-name">${escHtml(p.receivedBy)}</span><span class="rc-org">${escHtml(p.receivedByOrg)}</span></span>
+                </div>
+            </div>`;
+        }
+        const TENANT_COPY = 'TENANT\u2019S COPY', OWNER_COPY = 'OWNER\u2019S COPY';
+
+        function printReceipts(list) {
+            if (!list.length) { showToast('No receipts to print.', 'error'); return; }
+            const pages = list.map(p => `<div class="rc-page">${receiptHalfHTML(p, TENANT_COPY)}${receiptHalfHTML(p, OWNER_COPY)}</div>`).join('');
+            const title = list.length === 1
+                ? `Acknowledgement of Payment - ${list[0].receivedFrom} - ${formatCustomDate(list[0].date)}`
+                : `Elena's Apartment - Acknowledgement of Payments (${list.length})`;
+            const html = `<html><head><meta charset="UTF-8"><title>${escHtml(title)}</title>
+                <style>* { margin:0; padding:0; box-sizing:border-box; } body { background:#fff; } @page { margin:0; size:letter; }
+                ${RECEIPT_CSS}</style></head><body>${pages}<script>
+                window.onload = function() { setTimeout(function() { window.print(); }, 500); };
+                <\/script></body></html>`;
+            const win = window.open('', '_blank', 'width=1100,height=900');
+            if (!win) { showToast('Please allow popups for this site.', 'error'); return; }
+            win.document.write(html);
+            win.document.close();
+            showToast(`Opened ${list.length} acknowledgement receipt${list.length > 1 ? 's' : ''} (Tenant + Owner copy on each page)`, 'success');
+        }
+
+        // ---------- Payment status shown on each tenant row ----------
+        function paymentStatusBadge(tenantId, monthKey, utilitiesTotal) {
+            const list = payments.filter(p => p.tenantId === tenantId && p.monthKey === monthKey);
+            if (!list.length) return '';
+            const paid = list.reduce((sum, p) => sum + (p.billDue || 0), 0);
+            const full = utilitiesTotal > 0 && paid >= utilitiesTotal - 0.005;
+            return full
+                ? `<span class="badge badge-success" title="Utilities paid: ${escHtml(formatCurrency(paid))}"><i class="fas fa-check"></i> Paid</span>`
+                : `<span class="badge badge-warning" title="Received ${escHtml(formatCurrency(paid))} of ${escHtml(formatCurrency(utilitiesTotal))}">Partial</span>`;
+        }
+
+        // ---------- Receipts list ----------
+        function shownReceipts() {
+            const scope = receiptScope.value;
+            const key = monthSelect.value;
+            return payments
+                .filter(p => scope === 'all' || p.monthKey === key)
+                .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''));
+        }
+        function renderReceipts() {
+            if (!receiptsBody) return;
+            const list = shownReceipts();
+            const ids = new Set(payments.map(p => p.id));
+            [...selectedReceipts].forEach(id => { if (!ids.has(id)) selectedReceipts.delete(id); });
+            receiptCount.textContent = `${list.length} receipt${list.length === 1 ? '' : 's'}`;
+            if (!list.length) {
+                receiptsBody.innerHTML = `<tr><td colspan="8" class="empty-state"><i class="fas fa-receipt"></i>${receiptScope.value === 'all' ? 'No receipts yet' : 'No receipts for this month yet'}</td></tr>`;
+                receiptCheckAll.checked = false;
+                return;
+            }
+            let html = '', total = 0;
+            list.forEach(p => {
+                total += p.amount || 0;
+                html += `<tr data-rid="${escHtml(p.id)}">
+                    <td style="text-align:center;"><input type="checkbox" class="receipt-check" data-act="select" ${selectedReceipts.has(p.id) ? 'checked' : ''} aria-label="Select receipt" /></td>
+                    <td>${escHtml(formatCustomDate(p.date))}</td>
+                    <td><strong>${escHtml(p.room || '\u2014')}</strong></td>
+                    <td><strong>${escHtml(p.receivedFrom)}</strong>${p.tenantName && p.tenantName !== p.receivedFrom ? `<span class="rc-sub">${escHtml(p.tenantName)}</span>` : ''}</td>
+                    <td style="text-align:right;font-weight:700;">${escHtml(formatCurrency(p.amount))}${p.penalty > 0 ? `<span class="rc-sub">incl. ${escHtml(formatCurrency(p.penalty))} penalty</span>` : ''}</td>
+                    <td>${escHtml(receiptMethodText(p))}</td>
+                    <td style="font-size:.78rem;">${escHtml(receiptPeriodText(p).replace('Bill Period: ', '') || '\u2014')}</td>
+                    <td class="rc-actions-cell">
+                        <button class="btn btn-outline btn-sm" data-act="print" title="Print"><i class="fas fa-print"></i></button>
+                        <button class="btn btn-outline btn-sm" data-act="edit" title="Edit"><i class="fas fa-pen"></i></button>
+                        <button class="btn btn-danger-outline btn-sm" data-act="delete" title="Delete"><i class="fas fa-trash-alt"></i></button>
+                    </td></tr>`;
+            });
+            html += `<tr class="summary-row"><td colspan="4" style="text-align:right;">TOTAL RECEIVED</td><td style="text-align:right;">${escHtml(formatCurrency(total))}</td><td colspan="3"></td></tr>`;
+            receiptsBody.innerHTML = html;
+            receiptCheckAll.checked = list.every(p => selectedReceipts.has(p.id));
+        }
+
+        // ---------- Modal ----------
+        function fillTenantSelect(selectedId) {
+            ackEl.tenant.innerHTML = '';
+            tenants.forEach(t => {
+                const o = document.createElement('option');
+                o.value = t.id; o.textContent = tenantLabel(t);
+                ackEl.tenant.appendChild(o);
+            });
+            if (selectedId) ackEl.tenant.value = selectedId;
+        }
+        function applyTenantDefaults(tenantId) {
+            const t = tenants.find(x => x.id === tenantId);
+            if (!t) return;
+            const monthKey = monthSelect.value;
+            const bill = generateBillForTenant(t, monthKey);
+            modalCtx.monthKey = monthKey;
+            modalCtx.room = bill.room;
+            modalCtx.tenantName = t.name || '';
+            ackEl.from.value = (bill.billTo || t.name || '').trim();
+            ackEl.due.value = bill.utilitiesTotal;
+            ackEl.penalty.value = 0;
+            ackEl.pFrom.value = bill.utilitiesDescriptionDateFrom || '';
+            ackEl.pTo.value = bill.utilitiesDescriptionDateTo || '';
+        }
+        function updateMethodFields(userChanged) {
+            const m = ackEl.method.value;
+            const cfg = {
+                'Cash': null,
+                'Check': { ref: 'Check No.', bank: 'Bank / branch' },
+                'GCash': { ref: 'GCash reference no. (optional)', bank: null },
+                'Bank Transfer': { ref: 'Reference no. (optional)', bank: 'Bank / branch' },
+                'Other': { ref: null, bank: 'Details' }
+            }[m];
+            ackEl.refWrap.style.display = cfg && cfg.ref ? '' : 'none';
+            ackEl.bankWrap.style.display = cfg && cfg.bank ? '' : 'none';
+            if (cfg && cfg.ref) ackEl.refLabel.textContent = cfg.ref;
+            if (cfg && cfg.bank) ackEl.bankLabel.textContent = cfg.bank;
+            if (userChanged) ackEl.words.checked = (m === 'Check');
+        }
+        function readReceiptForm() {
+            const due = round2(parseFloat(ackEl.due.value) || 0);
+            const pen = round2(parseFloat(ackEl.penalty.value) || 0);
+            const m = ackEl.method.value;
+            return {
+                id: editingReceiptId || generateId(),
+                tenantId: ackEl.tenant.value,
+                monthKey: modalCtx.monthKey,
+                room: modalCtx.room,
+                tenantName: modalCtx.tenantName,
+                date: ackEl.date.value,
+                receivedFrom: ackEl.from.value.trim(),
+                billDue: due,
+                penalty: pen,
+                amount: round2(due + pen),
+                method: m,
+                refNo: ackEl.refWrap.style.display === 'none' ? '' : ackEl.ref.value.trim(),
+                bank: ackEl.bankWrap.style.display === 'none' ? '' : ackEl.bank.value.trim(),
+                showWords: ackEl.words.checked,
+                periodFrom: ackEl.pFrom.value,
+                periodTo: ackEl.pTo.value,
+                receivedBy: ackEl.recvBy.value.trim(),
+                receivedByOrg: ackEl.recvOrg.value.trim(),
+                createdAt: modalCtx.createdAt || new Date().toISOString()
+            };
+        }
+        function updateReceiptPreview() {
+            const p = readReceiptForm();
+            ackEl.total.textContent = formatCurrency(p.amount);
+            ackPreviewInner.innerHTML = receiptHalfHTML(p, TENANT_COPY);
+            const w = ackStage.clientWidth;
+            if (w > 0) {
+                const scale = Math.min(1, w / 816);
+                ackPreviewInner.style.transform = `scale(${scale})`;
+                ackStage.style.height = (528 * scale) + 'px';
+            }
+        }
+        function closeReceiptModal() { ackOverlay.classList.remove('show'); editingReceiptId = null; }
+
+        window.openReceiptModal = function(tenantId, receiptId) {
+            if (!tenants.length) { showToast('Add a tenant first.', 'error'); return; }
+            const defs = loadReceiptDefaults();
+            editingReceiptId = receiptId || null;
+            const existing = receiptId ? payments.find(p => p.id === receiptId) : null;
+            fillTenantSelect(existing ? existing.tenantId : (tenantId || tenants[0].id));
+            document.getElementById('ackTitleText').textContent = existing ? 'Edit Acknowledgement of Payment' : 'Acknowledgement of Payment';
+            document.getElementById('ackSave').innerHTML = '<i class="fas fa-save"></i> ' + (existing ? 'Update Receipt' : 'Save Receipt');
+            document.getElementById('ackSavePrint').innerHTML = '<i class="fas fa-print"></i> ' + (existing ? 'Update &amp; Print' : 'Save &amp; Print');
+            if (existing) {
+                modalCtx = { monthKey: existing.monthKey, room: existing.room, tenantName: existing.tenantName, createdAt: existing.createdAt };
+                ackEl.date.value = existing.date; ackEl.from.value = existing.receivedFrom;
+                ackEl.due.value = existing.billDue; ackEl.penalty.value = existing.penalty || 0;
+                ackEl.method.value = existing.method; ackEl.ref.value = existing.refNo || ''; ackEl.bank.value = existing.bank || '';
+                ackEl.words.checked = !!existing.showWords;
+                ackEl.pFrom.value = existing.periodFrom || ''; ackEl.pTo.value = existing.periodTo || '';
+                ackEl.recvBy.value = existing.receivedBy; ackEl.recvOrg.value = existing.receivedByOrg;
+                updateMethodFields(false);
+            } else {
+                modalCtx = { monthKey: monthSelect.value, room: '', tenantName: '', createdAt: '' };
+                applyTenantDefaults(ackEl.tenant.value);
+                ackEl.date.value = todayLocal();
+                ackEl.method.value = defs.method || 'Cash';
+                ackEl.ref.value = ''; ackEl.bank.value = '';
+                ackEl.recvBy.value = defs.receivedBy; ackEl.recvOrg.value = defs.receivedByOrg;
+                updateMethodFields(true);
+            }
+            ackOverlay.classList.add('show');
+            updateReceiptPreview();
+            setTimeout(() => { updateReceiptPreview(); ackEl.from.focus(); }, 30);
+        };
+
+        function saveReceipt(andPrint) {
+            const p = readReceiptForm();
+            if (!p.date) { showToast('Please enter the date received.', 'error'); return; }
+            if (!p.receivedFrom) { showToast('Please enter who the payment was received from.', 'error'); return; }
+            if (!(p.amount > 0)) { showToast('The amount received must be greater than zero.', 'error'); return; }
+            if (!p.receivedBy) { showToast('Please enter who received the payment.', 'error'); return; }
+            const idx = payments.findIndex(x => x.id === p.id);
+            if (idx !== -1) payments[idx] = p; else payments.push(p);
+            saveReceiptDefaults(p);
+            saveToStorage();
+            renderTenants();
+            closeReceiptModal();
+            if (andPrint) printReceipts([p]);
+            else showToast('Receipt saved.', 'success');
+        }
+
+        // ---------- Receipt events ----------
+        ackEl.tenant.addEventListener('change', function() { applyTenantDefaults(this.value); updateReceiptPreview(); });
+        ackEl.method.addEventListener('change', function() { updateMethodFields(true); updateReceiptPreview(); });
+        [ackEl.date, ackEl.from, ackEl.due, ackEl.penalty, ackEl.ref, ackEl.bank, ackEl.words, ackEl.pFrom, ackEl.pTo, ackEl.recvBy, ackEl.recvOrg]
+            .forEach(el => { el.addEventListener('input', updateReceiptPreview); el.addEventListener('change', updateReceiptPreview); });
+        document.getElementById('ackPenalty5').addEventListener('click', function() {
+            ackEl.penalty.value = Math.round((parseFloat(ackEl.due.value) || 0) * 0.05);
+            updateReceiptPreview();
+        });
+        document.getElementById('ackSave').addEventListener('click', () => saveReceipt(false));
+        document.getElementById('ackSavePrint').addEventListener('click', () => saveReceipt(true));
+        document.getElementById('ackCancel').addEventListener('click', closeReceiptModal);
+        document.getElementById('ackClose').addEventListener('click', closeReceiptModal);
+        ackOverlay.addEventListener('mousedown', function(e) { if (e.target === ackOverlay) closeReceiptModal(); });
+        document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && ackOverlay.classList.contains('show')) closeReceiptModal(); });
+        window.addEventListener('resize', function() { if (ackOverlay.classList.contains('show')) updateReceiptPreview(); });
+
+        receiptsBody.addEventListener('click', function(e) {
+            const btn = e.target.closest('[data-act]');
+            if (!btn) return;
+            const row = btn.closest('tr[data-rid]');
+            if (!row) return;
+            const id = row.dataset.rid;
+            const p = payments.find(x => x.id === id);
+            if (!p) return;
+            const act = btn.dataset.act;
+            if (act === 'select') {
+                if (btn.checked) selectedReceipts.add(id); else selectedReceipts.delete(id);
+                const list = shownReceipts();
+                receiptCheckAll.checked = list.length > 0 && list.every(x => selectedReceipts.has(x.id));
+            } else if (act === 'print') {
+                printReceipts([p]);
+            } else if (act === 'edit') {
+                window.openReceiptModal(p.tenantId, id);
+            } else if (act === 'delete') {
+                if (!confirm(`Delete the receipt for ${p.receivedFrom} (${formatCurrency(p.amount)})?`)) return;
+                payments = payments.filter(x => x.id !== id);
+                selectedReceipts.delete(id);
+                saveToStorage(); renderTenants();
+                showToast('Receipt deleted.', 'success');
+            }
+        });
+        receiptCheckAll.addEventListener('change', function() {
+            shownReceipts().forEach(p => { if (this.checked) selectedReceipts.add(p.id); else selectedReceipts.delete(p.id); });
+            renderReceipts();
+        });
+        receiptScope.addEventListener('change', renderReceipts);
+        monthSelect.addEventListener('change', renderReceipts);
+        loadBtn.addEventListener('click', renderReceipts);
+        document.getElementById('newReceiptBtn').addEventListener('click', () => window.openReceiptModal());
+        document.getElementById('printAllReceiptsBtn').addEventListener('click', () => {
+            printReceipts(shownReceipts().slice().sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.createdAt || '').localeCompare(b.createdAt || '')));
+        });
+        document.getElementById('printSelectedReceiptsBtn').addEventListener('click', () => {
+            const chosen = payments.filter(p => selectedReceipts.has(p.id))
+                .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.createdAt || '').localeCompare(b.createdAt || ''));
+            if (!chosen.length) { showToast('Tick one or more receipts first.', 'error'); return; }
+            printReceipts(chosen);
+        });
+
         // ---------- Clear ----------
         function clearAll() {
             if (!confirm('Delete ALL tenants and billing records permanently?')) return;
             if (!confirm('This cannot be undone! Are you sure?')) return;
-            tenants = []; allBills = [];
+            tenants = []; allBills = []; payments = [];
             saveToStorage(); renderTenants(); renderHistory();
             showToast('All data cleared.', 'success');
         }
@@ -1754,6 +2274,7 @@
             const data = {
                 tenants,
                 bills: allBills,
+                payments,
                 billingLogo: billingLogoDataUrl || DEFAULT_LOGO_DATA_URL,
                 signatories: {
                     approvedByName: approvedByNameInput.value.trim(),
@@ -1785,6 +2306,7 @@
                         return { ...t, _room: t._room || t.room || '', _elecPrev: t._elecPrev !== undefined ? t._elecPrev : 0, _elecCurr: t._elecCurr !== undefined ? t._elecCurr : 0, _elecRate: t._elecRate || t.elecRate || DEFAULT_ELEC_RATE, _waterPrev: t._waterPrev !== undefined ? t._waterPrev : 0, _waterCurr: t._waterCurr !== undefined ? t._waterCurr : 0, _waterRate: t._waterRate || t.waterRate || DEFAULT_WATER_RATE, _rent: t._rent || t.rent || DEFAULT_RENT, _billTo: t._billTo || t.billTo || '' };
                     });
                     allBills = data.bills || [];
+                    if (Array.isArray(data.payments)) payments = data.payments;
                     if (data.billingLogo) {
                         billingLogoDataUrl = data.billingLogo;
                         saveLogo();
@@ -1862,6 +2384,7 @@
         loadLogo();
         loadSettings();
         loadFromStorage();
+        renderReceipts();
         const initKey = monthSelect.value;
         if (initKey) loadMonthForAll(initKey);
         console.log('✅ Elena\'s Apartment Multi-Tenant Billing System ready. (Electric cost rounded up)');
@@ -1869,4 +2392,3 @@
 </script>
 </body>
 </html>
-```
