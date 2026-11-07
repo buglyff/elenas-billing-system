@@ -518,6 +518,27 @@
         .ack-foot { display:flex; justify-content:flex-end; gap:.6rem; flex-wrap:wrap; padding:1rem 1.4rem; border-top:1px solid var(--line-soft); background:#fafbfd; }
         @media (max-width: 900px) { .ack-body { grid-template-columns:1fr; } }
         @media (max-width: 480px) { .ack-grid { grid-template-columns:1fr; } }
+
+        /* ---------- Month rollover / entry helpers ---------- */
+        td input.reading-empty { border-color: #9fd3d6; background: #f3fafa; }
+        td input.reading-empty::placeholder { color: #7fb7ba; font-weight: 600; }
+        td input.reading-bad { border-color: var(--danger); background: var(--danger-tint); }
+        .usage-note { display:block; font-size:0.55rem; color: var(--muted); text-align:center; margin-top:2px; line-height:1.2; }
+        .usage-note.bad { color: var(--danger); font-weight: 700; }
+        .last-read.mismatch { color: var(--warning); font-weight: 700; }
+        .month-nav { padding: 0.35rem 0.6rem; }
+        .status-chip { display:inline-flex; align-items:center; gap:.35rem; font-size:.7rem; font-weight:700; padding:.25rem .7rem;
+            border-radius:40px; background: var(--info-tint); color: var(--info); }
+        .status-chip.ok { background: var(--success-tint); color: var(--success); }
+        .status-chip.pending { background: var(--warning-tint); color: var(--warning); }
+        .status-chip.warn { background: var(--gold-tint); color: #7a5a1c; }
+        #readingStatus { display:inline-flex; gap:.4rem; flex-wrap:wrap; align-items:center; }
+        .notice { display:flex; gap:.7rem; align-items:flex-start; padding:.7rem .95rem; border-radius:10px; font-size:.8rem; line-height:1.5;
+            margin-bottom:.8rem; border-left:3px solid var(--info); background: var(--info-tint); color:#264874; }
+        .notice.warn { border-left-color: var(--gold); background: var(--gold-tint); color:#7a5a1c; }
+        .notice > i { margin-top:.22rem; }
+        .notice > div:nth-child(2) { flex:1; min-width:0; }
+        .notice-actions { display:flex; gap:.4rem; flex-wrap:wrap; flex-shrink:0; }
     </style>
 </head>
 <body>
@@ -598,9 +619,13 @@
         <div class="toolbar">
             <div class="toolbar-group">
                 <span class="toolbar-label"><i class="fas fa-calendar"></i> Month</span>
+                <button class="btn btn-outline btn-sm month-nav" id="prevMonthBtn" title="Previous month" aria-label="Previous month"><i class="fas fa-chevron-left"></i></button>
                 <select id="billingMonth" class="month-select"></select>
-                <button class="btn btn-outline btn-sm" id="loadMonthBtn"><i class="fas fa-undo-alt"></i> Load Month</button>
+                <button class="btn btn-outline btn-sm month-nav" id="nextMonthBtn" title="Next month" aria-label="Next month"><i class="fas fa-chevron-right"></i></button>
+                <button class="btn btn-outline btn-sm" id="loadMonthBtn" title="Discard unsaved edits and reload this month's saved / carried-over values"><i class="fas fa-undo-alt"></i> Reload</button>
                 <button class="btn btn-warning btn-sm" id="generateAllBtn"><i class="fas fa-file-invoice"></i> Generate &amp; Save Bills</button>
+                <button class="btn btn-success btn-sm" id="startNextMonthBtn" title="Save this month's bills, then move to next month with readings carried over"><i class="fas fa-forward"></i> Save &amp; Start Next Month</button>
+                <span id="readingStatus"></span>
             </div>
             <div class="toolbar-group" style="margin-left:auto;">
                 <button class="btn btn-outline btn-sm" id="addTenantBtn"><i class="fas fa-user-plus"></i> Add Tenant</button>
@@ -614,6 +639,8 @@
                 <button class="btn btn-danger-outline btn-sm" id="clearAllBtn"><i class="fas fa-trash-alt"></i> Clear All</button>
             </div>
         </div>
+
+        <div id="monthNotice"></div>
 
         <!-- Import / Export Bar -->
         <div class="import-export-bar">
@@ -650,7 +677,7 @@
                 <tfoot id="summaryFooter" style="display: none;"><tr class="summary-row"><td colspan="14" style="text-align:right; font-weight:700;">GRAND TOTAL</td><td id="grandTotal" style="font-weight:800; color:#101a2e; text-align:right; padding-right:8px;">₱0.00</td><td></td></tr></tfoot>
             </table>
         </div>
-        <div class="callout"><i class="fas fa-info-circle"></i> <strong>Water Billing:</strong> First 10 m³ = ₱300 minimum, excess charged at rate</div>
+        <div class="callout"><i class="fas fa-info-circle"></i> <strong>Water Billing:</strong> First 10 m³ = ₱300 minimum, excess charged at rate<br><i class="fas fa-redo"></i> <strong>New month:</strong> after you generate &amp; save a month, the next month opens with each <em>Curr</em> reading moved to <em>Prev</em>, the new <em>Curr</em> boxes empty, and rent / rates / room carried forward. Press <strong>Enter</strong> in a reading box to jump to the same box on the next row.</div>
     </div>
 
     <!-- Acknowledgement Receipts -->
@@ -813,6 +840,9 @@
         let tenants = [];
         let allBills = [];
         let payments = [];   // acknowledgement receipts
+        let drafts = {};     // unsaved edits per month: { "YYYY-MM": { tenantId: { field: value } } }
+        let settingsMonthKey = ''; // billing month the statement dates (rent month, utilities range) were last set for
+        let persistTimer = null;
         let currentMonthKey = '';
         let saveTimeout = null;
 
@@ -872,7 +902,7 @@
             };
         }
         function saveSettings() {
-            localStorage.setItem('elenasApartmentSettings', JSON.stringify(getSettings()));
+            localStorage.setItem('elenasApartmentSettings', JSON.stringify(Object.assign(getSettings(), { settingsMonthKey })));
             updateGracePeriodDisplay();
         }
         function loadSettings() {
@@ -895,6 +925,7 @@
                 else if (s.rentDescriptionDateFrom) descriptionDateFromInput.value = s.rentDescriptionDateFrom;
                 if (s.utilitiesDescriptionDateTo) descriptionDateToInput.value = s.utilitiesDescriptionDateTo;
                 else if (s.rentDescriptionDateTo) descriptionDateToInput.value = s.rentDescriptionDateTo;
+                settingsMonthKey = s.settingsMonthKey || (s.statementHeaderDate || '').slice(0, 7);
                 if (s.approvedByName) approvedByNameInput.value = s.approvedByName;
                 if (s.approvedByTitle) approvedByTitleInput.value = s.approvedByTitle;
                 if (s.preparedByName) preparedByNameInput.value = s.preparedByName;
@@ -903,6 +934,7 @@
             if (!statementHeaderDateInput.value) {
                 statementHeaderDateInput.value = new Date().toISOString().slice(0,10);
             }
+            if (!/^\d{4}-\d{2}$/.test(settingsMonthKey)) settingsMonthKey = monthSelect.value;
             renderAdvanceRows();
             updateGracePeriodDisplay();
         }
@@ -1088,20 +1120,26 @@
         }
 
         // Month dropdown
+        function ensureMonthOption(key) {
+            if (!/^\d{4}-\d{2}$/.test(key)) return;
+            if ([...monthSelect.options].some(o => o.value === key)) return;
+            const [y,m] = key.split('-').map(Number);
+            const opt = document.createElement('option');
+            opt.value = key; opt.textContent = formatMonthDisplay(y,m);
+            const after = [...monthSelect.options].find(o => o.value < key);   // keep newest first
+            monthSelect.insertBefore(opt, after || null);
+        }
+        function ensureBillMonthOptions() {
+            allBills.forEach(b => ensureMonthOption(b.monthKey));
+            Object.keys(drafts).forEach(ensureMonthOption);
+        }
         function populateMonthDropdown() {
-            const now = new Date(); const cy = now.getFullYear(); const cm = now.getMonth()+1;
+            const now = new Date();
+            const nowKey = getMonthKey(now.getFullYear(), now.getMonth() + 1);
             monthSelect.innerHTML = '';
-            for (let i=0; i<24; i++) {
-                let m = cm - i, y = cy;
-                while (m <= 0) { m += 12; y -= 1; }
-                const key = getMonthKey(y,m);
-                const opt = document.createElement('option');
-                opt.value = key; opt.textContent = formatMonthDisplay(y,m);
-                monthSelect.appendChild(opt);
-            }
-            const def = getMonthKey(cy,cm);
-            if ([...monthSelect.options].some(o=>o.value===def)) monthSelect.value = def;
-            else monthSelect.value = monthSelect.options[0].value;
+            // next month (to get ahead) + the last 24 months
+            for (let i = -1; i < 24; i++) ensureMonthOption(shiftMonthKey(nowKey, -i));
+            monthSelect.value = nowKey;
             currentMonthKey = monthSelect.value;
             updateMonthDisplay();
         }
@@ -1114,10 +1152,24 @@
         }
 
         // ---------- Storage ----------
+        function writeStorage() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify({ tenants, bills: allBills, payments, drafts }));
+                return true;
+            } catch (e) {
+                showToast('Could not save to this browser (storage full or blocked). Export your data as a backup.', 'error');
+                return false;
+            }
+        }
         function loadFromStorage() {
             const stored = localStorage.getItem(STORAGE_KEY);
             if (stored) {
-                try { const data = JSON.parse(stored); tenants = data.tenants || []; allBills = data.bills || []; payments = Array.isArray(data.payments) ? data.payments : []; } catch(e) { tenants=[]; allBills=[]; payments=[]; }
+                try {
+                    const data = JSON.parse(stored);
+                    tenants = data.tenants || []; allBills = data.bills || [];
+                    payments = Array.isArray(data.payments) ? data.payments : [];
+                    drafts = (data.drafts && typeof data.drafts === 'object') ? data.drafts : {};
+                } catch(e) { tenants=[]; allBills=[]; payments=[]; drafts={}; }
             } else {
                 tenants = [
                     { id: generateId(), room: '101', name: 'Maria Santos', billTo: 'Santos Family', rent: 15000, elecRate: 12, waterRate: 30 },
@@ -1126,202 +1178,382 @@
                 ];
                 saveToStorage();
             }
-            // Ensure all tenants have _ fields and default values
-            tenants = tenants.map(t => {
-                return { 
-                    ...t, 
-                    _room: t._room || t.room || '', 
-                    _elecPrev: t._elecPrev !== undefined ? t._elecPrev : 0, 
-                    _elecCurr: t._elecCurr !== undefined ? t._elecCurr : 0, 
-                    _elecRate: t._elecRate || t.elecRate || DEFAULT_ELEC_RATE, 
-                    _waterPrev: t._waterPrev !== undefined ? t._waterPrev : 0, 
-                    _waterCurr: t._waterCurr !== undefined ? t._waterCurr : 0, 
-                    _waterRate: t._waterRate || t.waterRate || DEFAULT_WATER_RATE, 
-                    _rent: t._rent || t.rent || DEFAULT_RENT, 
-                    _billTo: t._billTo || t.billTo || '' 
-                };
-            });
+            // Ensure all tenants have working (_) fields. A blank current reading is stored as null.
+            tenants = tenants.map(t => ({
+                ...t,
+                _room: t._room || t.room || '',
+                _elecPrev: t._elecPrev !== undefined ? t._elecPrev : 0,
+                _elecCurr: t._elecCurr !== undefined ? t._elecCurr : null,
+                _elecRate: t._elecRate || t.elecRate || DEFAULT_ELEC_RATE,
+                _waterPrev: t._waterPrev !== undefined ? t._waterPrev : 0,
+                _waterCurr: t._waterCurr !== undefined ? t._waterCurr : null,
+                _waterRate: t._waterRate || t.waterRate || DEFAULT_WATER_RATE,
+                _rent: t._rent || t.rent || DEFAULT_RENT,
+                _billTo: t._billTo || t.billTo || ''
+            }));
             renderTenants(); renderHistory();
         }
         function saveToStorage() {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify({ tenants, bills: allBills, payments }));
+            writeStorage();
             renderHistory();
             renderReceipts();
             showSavedIndicator();
         }
-
-        // ---------- Load month ----------
-        function getPreviousMonthReadings(tenantId, monthKey) {
-            const [y,m] = monthKey.split('-').map(Number);
-            let py=y, pm=m-1; if (pm===0) { pm=12; py-=1; }
-            const prevKey = getMonthKey(py,pm);
-            const prevBill = allBills.find(b => b.tenantId === tenantId && b.monthKey === prevKey);
-            if (prevBill) return { elec: prevBill.elecCurr || 0, water: prevBill.waterCurr || 0 };
-            return null;
+        // Light-weight save used while typing in the table (no re-rendering of other sections)
+        function schedulePersist() {
+            clearTimeout(persistTimer);
+            persistTimer = setTimeout(function() { persistTimer = null; if (writeStorage()) showSavedIndicator(); }, 350);
         }
-        function loadMonthForAll(monthKey) {
+        window.addEventListener('pagehide', function() {
+            if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; writeStorage(); }
+        });
+
+        // ---------- Month helpers ----------
+        function monthsBetween(a, b) {
+            const [ya, ma] = a.split('-').map(Number), [yb, mb] = b.split('-').map(Number);
+            return (yb - ya) * 12 + (mb - ma);
+        }
+        function shiftMonthKey(key, delta) {
+            const [y, m] = key.split('-').map(Number);
+            const t = y * 12 + (m - 1) + delta;
+            return getMonthKey(Math.floor(t / 12), (t % 12) + 1);
+        }
+        function shiftDateISO(iso, delta) {
+            const mt = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+            if (!mt) return iso;
+            const key = shiftMonthKey(mt[1] + '-' + mt[2], delta);
+            const [y, m] = key.split('-').map(Number);
+            const day = Math.min(Number(mt[3]), new Date(y, m, 0).getDate());
+            return key + '-' + String(day).padStart(2, '0');
+        }
+        function monthLabel(key) { const [y, m] = key.split('-').map(Number); return formatMonthDisplay(y, m); }
+        function shortMonth(key) { const [y, m] = key.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'short' }); }
+
+        // ---------- Readings: carry-over from the latest earlier bill ----------
+        // The most recent saved bill BEFORE the given month (so a skipped month never resets readings to 0).
+        function getLastBill(tenantId, monthKey) {
+            let best = null;
+            allBills.forEach(b => {
+                if (b.tenantId === tenantId && b.monthKey < monthKey && (!best || b.monthKey > best.monthKey)) best = b;
+            });
+            return best;
+        }
+        // Reading that becomes next month's "previous". (Guards old bills saved with a blank current stored as 0.)
+        function carryReading(curr, prev) {
+            curr = Number(curr) || 0; prev = Number(prev) || 0;
+            return (curr === 0 && prev > 0) ? prev : curr;
+        }
+        // What a tenant row should contain for a month, before any unsaved edits are applied.
+        function baseStateFor(tenant, monthKey) {
+            const existing = allBills.find(b => b.tenantId === tenant.id && b.monthKey === monthKey);
+            if (existing) {
+                return {
+                    room: existing.room || tenant.room || '',
+                    billTo: existing.billTo || tenant.billTo || '',
+                    rent: existing.rent || tenant.rent || DEFAULT_RENT,
+                    elecPrev: existing.elecPrev || 0,
+                    elecCurr: existing.elecReadingMissing ? null : (existing.elecCurr ?? 0),
+                    elecRate: existing.elecRate || tenant.elecRate || DEFAULT_ELEC_RATE,
+                    waterPrev: existing.waterPrev || 0,
+                    waterCurr: existing.waterReadingMissing ? null : (existing.waterCurr ?? 0),
+                    waterRate: existing.waterRate || tenant.waterRate || DEFAULT_WATER_RATE
+                };
+            }
+            // New month: previous = last billed current reading; current = blank; rent, rates, room carry forward too
+            const last = getLastBill(tenant.id, monthKey);
+            return {
+                room: (last && last.room) || tenant.room || '',
+                billTo: (last && last.billTo) || tenant.billTo || '',
+                rent: (last && last.rent) || tenant.rent || DEFAULT_RENT,
+                elecPrev: last ? carryReading(last.elecCurr, last.elecPrev) : 0,
+                elecCurr: null,
+                elecRate: (last && last.elecRate) || tenant.elecRate || DEFAULT_ELEC_RATE,
+                waterPrev: last ? carryReading(last.waterCurr, last.waterPrev) : 0,
+                waterCurr: null,
+                waterRate: (last && last.waterRate) || tenant.waterRate || DEFAULT_WATER_RATE
+            };
+        }
+        // Unsaved edits are remembered per month, so switching months never loses typed readings.
+        function setDraft(tenant, monthKey, field, value) {
+            const base = baseStateFor(tenant, monthKey);
+            const md = drafts[monthKey] = drafts[monthKey] || {};
+            const td = md[tenant.id] = md[tenant.id] || {};
+            if (value === base[field]) delete td[field]; else td[field] = value;
+            if (!Object.keys(td).length) delete md[tenant.id];
+            if (!Object.keys(md).length) delete drafts[monthKey];
+        }
+        function hasDrafts(monthKey) { return !!(drafts[monthKey] && Object.keys(drafts[monthKey]).length); }
+        function applyState(t, s) {
+            t._room = s.room; t._billTo = s.billTo; t._rent = s.rent;
+            t._elecPrev = s.elecPrev; t._elecCurr = s.elecCurr; t._elecRate = s.elecRate;
+            t._waterPrev = s.waterPrev; t._waterCurr = s.waterCurr; t._waterRate = s.waterRate;
+        }
+        function loadMonthForAll(monthKey, silent) {
             const [y,m] = monthKey.split('-').map(Number);
             tenants.forEach(tenant => {
-                const existing = allBills.find(b => b.tenantId === tenant.id && b.monthKey === monthKey);
-                const prev = getPreviousMonthReadings(tenant.id, monthKey);
-                if (existing) {
-                    tenant._elecPrev = existing.elecPrev || 0; tenant._elecCurr = existing.elecCurr || 0;
-                    tenant._elecRate = existing.elecRate || tenant.elecRate || DEFAULT_ELEC_RATE;
-                    tenant._waterPrev = existing.waterPrev || 0; tenant._waterCurr = existing.waterCurr || 0;
-                    tenant._waterRate = existing.waterRate || tenant.waterRate || DEFAULT_WATER_RATE;
-                    tenant._rent = existing.rent || tenant.rent || DEFAULT_RENT;
-                    tenant._billTo = existing.billTo || tenant.billTo || '';
-                    tenant._room = existing.room || tenant.room || '';
-                } else {
-                    tenant._elecPrev = prev ? prev.elec : 0; 
-                    tenant._waterPrev = prev ? prev.water : 0;
-                    tenant._elecCurr = 0; tenant._waterCurr = 0;
-                    tenant._elecRate = tenant.elecRate || DEFAULT_ELEC_RATE;
-                    tenant._waterRate = tenant.waterRate || DEFAULT_WATER_RATE;
-                    tenant._rent = tenant.rent || DEFAULT_RENT;
-                    tenant._billTo = tenant.billTo || '';
-                    tenant._room = tenant.room || '';
-                }
+                const draft = (drafts[monthKey] && drafts[monthKey][tenant.id]) || {};
+                applyState(tenant, Object.assign({}, baseStateFor(tenant, monthKey), draft));
             });
-            renderTenants(); updateMonthDisplay();
-            showToast(`Loaded ${tenants.length} tenants for ${formatMonthDisplay(y,m)}`, 'success');
+            renderTenants(); updateMonthDisplay(); renderMonthNotice();
+            if (!silent) showToast(`Loaded ${tenants.length} tenants for ${formatMonthDisplay(y,m)}`, 'success');
+        }
+
+        // Numbers for one tenant row. A blank current reading counts as "no usage" (current = previous).
+        function rowValues(t) {
+            const elecPrev = Number(t._elecPrev) || 0, waterPrev = Number(t._waterPrev) || 0;
+            const elecBlank = t._elecCurr === null || t._elecCurr === undefined;
+            const waterBlank = t._waterCurr === null || t._waterCurr === undefined;
+            const elecCurr = elecBlank ? elecPrev : (Number(t._elecCurr) || 0);
+            const waterCurr = waterBlank ? waterPrev : (Number(t._waterCurr) || 0);
+            const rent = t._rent || DEFAULT_RENT;
+            const elecRate = t._elecRate || DEFAULT_ELEC_RATE;
+            const waterRate = t._waterRate || DEFAULT_WATER_RATE;
+            const elecUnits = Math.max(0, elecCurr - elecPrev);
+            const elecCost = roundUpElectricCost(elecUnits * elecRate);
+            const waterUnits = Math.max(0, waterCurr - waterPrev);
+            const waterResult = getWaterBreakdown(waterUnits, waterRate);
+            const waterCost = waterResult.total;
+            return {
+                room: t._room || t.room || '', billTo: t._billTo || '', rent,
+                elecPrev, elecCurr, elecBlank, elecNeg: !elecBlank && elecCurr < elecPrev, elecRate, elecUnits, elecCost,
+                waterPrev, waterCurr, waterBlank, waterNeg: !waterBlank && waterCurr < waterPrev, waterRate, waterUnits, waterResult, waterCost,
+                utilities: elecCost + waterCost, total: rent + elecCost + waterCost
+            };
+        }
+        function hintFor(t, monthKey, kind, prevVal) {
+            const last = getLastBill(t.id, monthKey);
+            if (!last) return { text: '', mismatch: false };
+            const carry = kind === 'elec' ? carryReading(last.elecCurr, last.elecPrev) : carryReading(last.waterCurr, last.waterPrev);
+            return { text: `${shortMonth(last.monthKey)} bill: ${carry}`, mismatch: Number(prevVal) !== carry };
         }
 
         // ---------- Render Tenants ----------
+        function usageText(v, kind) {
+            const blank = kind === 'elec' ? v.elecBlank : v.waterBlank;
+            const neg = kind === 'elec' ? v.elecNeg : v.waterNeg;
+            const units = kind === 'elec' ? v.elecUnits : v.waterUnits;
+            if (blank) return 'no reading yet';
+            if (neg) return 'Curr &lt; Prev';
+            return `${+units.toFixed(2)} ${kind === 'elec' ? 'kWh' : 'm³'}`;
+        }
+        function elecCostCellHTML(v) {
+            return `<input type="text" readonly tabindex="-1" value="${formatCurrency(v.elecCost)}" style="font-weight:500;min-width:55px;width:100%;text-align:center;" />
+                    <span class="usage-note ${v.elecNeg ? 'bad' : ''}">${usageText(v, 'elec')}</span>`;
+        }
+        function waterCellHTML(v) {
+            const badge = v.waterResult.minimumApplied ? `<span class="badge badge-warning water-badge">min</span>` : `<span class="badge badge-info water-badge">+excess</span>`;
+            return `<span style="font-weight:500;font-size:0.78rem;">${formatCurrency(v.waterCost)}</span> ${badge}
+                    <span class="water-breakdown">${escHtml(v.waterResult.breakdown)}</span>
+                    <span class="usage-note ${v.waterNeg ? 'bad' : ''}">${usageText(v, 'water')}</span>`;
+        }
+        function payBadgesHTML(tenantId, monthKey, utilities) { return paymentStatusBadge(tenantId, monthKey, utilities) + rentStatusBadge(tenantId, monthKey); }
+        function currClass(blank, neg) { return blank ? 'reading-empty' : (neg ? 'reading-bad' : ''); }
+
+        function rowHTML(t, index, monthKey) {
+            const v = rowValues(t);
+            const id = escHtml(t.id);
+            const eh = hintFor(t, monthKey, 'elec', v.elecPrev), wh = hintFor(t, monthKey, 'water', v.waterPrev);
+            return `<tr class="tenant-row" data-tenant-id="${id}">
+                <td class="col-index" style="text-align:center;">${index+1}</td>
+                <td class="col-room room-cell"><input type="text" value="${escHtml(v.room)}" data-field="room" data-id="${id}" placeholder="e.g., 101" /></td>
+                <td class="col-name tenant-name-cell"><input type="text" value="${escHtml(t.name)}" data-field="name" data-id="${id}" placeholder="Tenant Name" /></td>
+                <td class="col-billto"><input type="text" value="${escHtml(v.billTo)}" data-field="billTo" data-id="${id}" placeholder="Company or Family Name" /></td>
+                <td class="col-rent"><input type="number" step="0.01" value="${v.rent}" data-field="rent" data-id="${id}" /></td>
+                <td class="col-elec-prev">
+                    <div class="input-group-small">
+                        <input type="number" step="1" value="${v.elecPrev}" data-field="elecPrev" data-id="${id}" placeholder="kWh" />
+                        <span class="last-read ${eh.mismatch ? 'mismatch' : ''}">${escHtml(eh.text)}</span>
+                    </div>
+                </td>
+                <td class="col-elec-curr"><input type="number" step="1" value="${v.elecBlank ? '' : v.elecCurr}" data-field="elecCurr" data-id="${id}" placeholder="enter" class="${currClass(v.elecBlank, v.elecNeg)}" /></td>
+                <td class="col-elec-rate"><input type="number" step="0.01" value="${v.elecRate}" data-field="elecRate" data-id="${id}" /></td>
+                <td class="col-elec-cost">${elecCostCellHTML(v)}</td>
+                <td class="col-water-prev">
+                    <div class="input-group-small">
+                        <input type="number" step="1" value="${v.waterPrev}" data-field="waterPrev" data-id="${id}" placeholder="m³" />
+                        <span class="last-read ${wh.mismatch ? 'mismatch' : ''}">${escHtml(wh.text)}</span>
+                    </div>
+                </td>
+                <td class="col-water-curr"><input type="number" step="1" value="${v.waterBlank ? '' : v.waterCurr}" data-field="waterCurr" data-id="${id}" placeholder="enter" class="${currClass(v.waterBlank, v.waterNeg)}" /></td>
+                <td class="col-water-rate"><input type="number" step="0.01" value="${v.waterRate}" data-field="waterRate" data-id="${id}" /></td>
+                <td class="col-water-cost" style="text-align:center;">${waterCellHTML(v)}</td>
+                <td class="col-total" style="text-align:right;padding-right:8px;font-weight:800;">${formatCurrency(v.total)}</td>
+                <td class="col-actions" style="text-align:center;"><div class="row-actions"><div class="ra-line"><button class="btn btn-success btn-sm btn-receipt-row" onclick="openReceiptModal('${id}')" title="Utilities paid? Record payment & print acknowledgement receipt"><i class="fas fa-receipt"></i></button><button class="btn btn-primary btn-sm btn-receipt-row" onclick="openReceiptModal('${id}', null, 'rent')" title="Rent paid? Record payment & print acknowledgement receipt"><i class="fas fa-home"></i></button><button class="btn btn-danger btn-sm" onclick="removeTenant('${id}')" style="padding:0.12rem 0.35rem;font-size:0.6rem;"><i class="fas fa-trash"></i></button></div><span class="pay-slot">${payBadgesHTML(t.id, monthKey, v.utilities)}</span></div></td>
+            </tr>`;
+        }
+
         function renderTenants() {
             if (pruneAdvanceRent()) saveSettings();
             refreshAdvanceRows();
             if (!tenants.length) {
                 tenantsBody.innerHTML = `<tr><td colspan="15" class="empty-state"><i class="fas fa-user-plus"></i>No tenants added yet. Click &ldquo;Add Tenant&rdquo; to start.</td></tr>`;
-                summaryFooter.style.display = 'none'; tenantCount.textContent = '0 tenants'; return;
+                summaryFooter.style.display = 'none'; tenantCount.textContent = '0 tenants';
+                renderReadingStatus();
+                return;
             }
-            let html = ''; let grandTotalSum = 0;
             const monthKey = monthSelect.value;
-            
-            tenants.forEach((tenant, index) => {
-                const room = tenant._room || tenant.room || '';
-                const billTo = tenant._billTo || '';
-                const rent = tenant._rent || DEFAULT_RENT;
-                const elecPrev = tenant._elecPrev || 0; const elecCurr = tenant._elecCurr || 0;
-                const elecRate = tenant._elecRate || DEFAULT_ELEC_RATE;
-                const waterPrev = tenant._waterPrev || 0; const waterCurr = tenant._waterCurr || 0;
-                const waterRate = tenant._waterRate || DEFAULT_WATER_RATE;
-                
-                const elecUnits = Math.max(0, elecCurr - elecPrev);
-                const elecCostRaw = elecUnits * elecRate;
-                const elecCost = roundUpElectricCost(elecCostRaw);
-                
-                const waterUnits = Math.max(0, waterCurr - waterPrev);
-                const waterResult = getWaterBreakdown(waterUnits, waterRate);
-                const waterCost = waterResult.total;
-                
-                const total = rent + elecCost + waterCost;
-                grandTotalSum += total;
-                
-                const waterBadge = waterResult.minimumApplied ? `<span class="badge badge-warning water-badge">min</span>` : `<span class="badge badge-info water-badge">+excess</span>`;
-                
-                // Get previous month readings for display
-                const prevReadings = getPreviousMonthReadings(tenant.id, monthKey);
-                const prevElecDisplay = prevReadings ? `Last: ${prevReadings.elec}` : '';
-                const prevWaterDisplay = prevReadings ? `Last: ${prevReadings.water}` : '';
-                
-                html += `<tr class="tenant-row" data-tenant-id="${tenant.id}">
-                    <td class="col-index" style="text-align:center;">${index+1}</td>
-                    <td class="col-room room-cell"><input type="text" value="${room}" data-field="room" data-id="${tenant.id}" placeholder="e.g., 101" style="width:100%;min-width:55px;font-weight:600;color:#101a2e;text-align:center;" /></td>
-                    <td class="col-name tenant-name-cell"><input type="text" value="${tenant.name}" data-field="name" data-id="${tenant.id}" placeholder="Tenant Name" style="min-width:140px;width:100%;font-weight:600;" /></td>
-                    <td class="col-billto"><input type="text" value="${billTo}" data-field="billTo" data-id="${tenant.id}" placeholder="Company or Family Name" style="min-width:140px;width:100%;" /></td>
-                    <td class="col-rent"><input type="number" step="0.01" value="${rent}" data-field="rent" data-id="${tenant.id}" style="min-width:42px;width:100%;text-align:center;" /></td>
-                    <td class="col-elec-prev">
-                        <div class="input-group-small">
-                            <input type="number" step="1" value="${elecPrev}" data-field="elecPrev" data-id="${tenant.id}" placeholder="kWh" style="min-width:42px;width:100%;text-align:center;" />
-                            <span class="last-read">${prevElecDisplay}</span>
-                        </div>
-                    </td>
-                    <td class="col-elec-curr"><input type="number" step="1" value="${elecCurr}" data-field="elecCurr" data-id="${tenant.id}" placeholder="kWh" style="min-width:42px;width:100%;text-align:center;" /></td>
-                    <td class="col-elec-rate"><input type="number" step="0.01" value="${elecRate}" data-field="elecRate" data-id="${tenant.id}" style="min-width:42px;width:100%;text-align:center;" /></td>
-                    <td class="col-elec-cost"><input type="text" readonly value="${formatCurrency(elecCost)}" style="background:#fafbfd;font-weight:500;min-width:55px;width:100%;text-align:center;" /></td>
-                    <td class="col-water-prev">
-                        <div class="input-group-small">
-                            <input type="number" step="1" value="${waterPrev}" data-field="waterPrev" data-id="${tenant.id}" placeholder="m³" style="min-width:42px;width:100%;text-align:center;" />
-                            <span class="last-read">${prevWaterDisplay}</span>
-                        </div>
-                    </td>
-                    <td class="col-water-curr"><input type="number" step="1" value="${waterCurr}" data-field="waterCurr" data-id="${tenant.id}" placeholder="m³" style="min-width:42px;width:100%;text-align:center;" /></td>
-                    <td class="col-water-rate"><input type="number" step="0.01" value="${waterRate}" data-field="waterRate" data-id="${tenant.id}" style="min-width:42px;width:100%;text-align:center;" /></td>
-                    <td class="col-water-cost" style="text-align:center;">
-                        <span style="font-weight:500;font-size:0.78rem;">${formatCurrency(waterCost)}</span> ${waterBadge}
-                        <span class="water-breakdown">${waterResult.breakdown}</span>
-                    </td>
-                    <td class="col-total" style="text-align:right;padding-right:8px;font-weight:800;">${formatCurrency(total)}</td>
-                    <td class="col-actions" style="text-align:center;"><div class="row-actions"><div class="ra-line"><button class="btn btn-success btn-sm btn-receipt-row" onclick="openReceiptModal('${tenant.id}')" title="Utilities paid? Record payment & print acknowledgement receipt"><i class="fas fa-receipt"></i></button><button class="btn btn-primary btn-sm btn-receipt-row" onclick="openReceiptModal('${tenant.id}', null, 'rent')" title="Rent paid? Record payment & print acknowledgement receipt"><i class="fas fa-home"></i></button><button class="btn btn-danger btn-sm" onclick="removeTenant('${tenant.id}')" style="padding:0.12rem 0.35rem;font-size:0.6rem;"><i class="fas fa-trash"></i></button></div>${paymentStatusBadge(tenant.id, monthKey, elecCost + waterCost)}${rentStatusBadge(tenant.id, monthKey)}</div></td>
-                </tr>`;
-            });
-            tenantsBody.innerHTML = html;
+            tenantsBody.innerHTML = tenants.map((t, i) => rowHTML(t, i, monthKey)).join('');
             summaryFooter.style.display = 'table-footer-group';
-            grandTotal.textContent = formatCurrency(grandTotalSum);
             tenantCount.textContent = `${tenants.length} tenants`;
-            
-            // Attach event listeners for blur event only
-            document.querySelectorAll('[data-field]').forEach(input => {
-                // Use blur event to save when user leaves the field
-                input.addEventListener('blur', function() { 
-                    updateTenantField(this.dataset.id, this.dataset.field, this.value); 
-                });
-                // Also save on Enter key press
-                input.addEventListener('keydown', function(e) {
-                    if (e.key === 'Enter') {
-                        this.blur();
-                    }
-                });
-            });
+            refreshTotals();
         }
 
-        function updateTenantField(tenantId, field, value) {
-            const tenant = tenants.find(t => t.id === tenantId);
-            if (!tenant) return;
-            const map = { 'room': '_room', 'name': 'name', 'billTo': '_billTo', 'rent': '_rent', 'elecPrev': '_elecPrev', 'elecCurr': '_elecCurr', 'elecRate': '_elecRate', 'waterPrev': '_waterPrev', 'waterCurr': '_waterCurr', 'waterRate': '_waterRate' };
-            const mf = map[field];
-            if (!mf) return;
-            if (['_rent','_elecPrev','_elecCurr','_elecRate','_waterPrev','_waterCurr','_waterRate'].includes(mf)) {
-                const val = parseFloat(value);
-                tenant[mf] = isNaN(val) ? 0 : val;
-            } else {
-                tenant[mf] = value;
+        // Update one row's computed cells in place (keeps the cursor where it is while typing)
+        function refreshRow(tenantId) {
+            const t = tenants.find(x => x.id === tenantId);
+            if (!t) return;
+            const tr = tenantsBody.querySelector(`tr[data-tenant-id="${CSS.escape(tenantId)}"]`);
+            if (!tr) return;
+            const monthKey = monthSelect.value;
+            const v = rowValues(t);
+            tr.querySelector('.col-elec-cost').innerHTML = elecCostCellHTML(v);
+            tr.querySelector('.col-water-cost').innerHTML = waterCellHTML(v);
+            tr.querySelector('.col-total').textContent = formatCurrency(v.total);
+            [['elec', v.elecBlank, v.elecNeg, v.elecPrev], ['water', v.waterBlank, v.waterNeg, v.waterPrev]].forEach(([k, blank, neg, prev]) => {
+                const inp = tr.querySelector(`[data-field="${k}Curr"]`);
+                inp.classList.toggle('reading-empty', blank);
+                inp.classList.toggle('reading-bad', neg);
+                const h = hintFor(t, monthKey, k, prev);
+                const span = tr.querySelector(`.col-${k}-prev .last-read`);
+                span.textContent = h.text; span.classList.toggle('mismatch', h.mismatch);
+            });
+            const slot = tr.querySelector('.pay-slot');
+            if (slot) slot.innerHTML = payBadgesHTML(t.id, monthKey, v.utilities);
+            refreshTotals();
+        }
+        function refreshTotals() {
+            let sum = 0;
+            tenants.forEach(t => { sum += rowValues(t).total; });
+            grandTotal.textContent = formatCurrency(sum);
+            renderReadingStatus();
+        }
+        function renderReadingStatus() {
+            const el = document.getElementById('readingStatus');
+            if (!el) return;
+            const key = monthSelect.value;
+            if (!tenants.length) { el.innerHTML = ''; return; }
+            const done = tenants.filter(t => { const v = rowValues(t); return !v.elecBlank && !v.waterBlank; }).length;
+            const saved = allBills.some(b => b.monthKey === key);
+            let html = `<span class="status-chip ${done === tenants.length ? 'ok' : 'pending'}" title="Tenants with both electric and water current readings entered"><i class="fas fa-tachometer-alt"></i> Readings ${done}/${tenants.length}</span>`;
+            if (hasDrafts(key)) html += `<span class="status-chip warn" title="Click Generate & Save Bills to keep these"><i class="fas fa-pen"></i> Unsaved changes</span>`;
+            else if (saved) html += `<span class="status-chip ok"><i class="fas fa-check"></i> Bills saved</span>`;
+            el.innerHTML = html;
+        }
+
+        // ---------- New-month / settings notices ----------
+        function noticeHTML(kind, icon, body, actions) {
+            return `<div class="notice ${kind}"><i class="fas ${icon}"></i><div>${body}</div>${actions ? `<div class="notice-actions">${actions}</div>` : ''}</div>`;
+        }
+        function renderMonthNotice() {
+            const el = document.getElementById('monthNotice');
+            if (!el) return;
+            const key = monthSelect.value;
+            let html = '';
+            if (key && tenants.length) {
+                const hasBills = allBills.some(b => b.monthKey === key);
+                const earlier = allBills.filter(b => b.monthKey < key).map(b => b.monthKey).sort();
+                const lastKey = earlier[earlier.length - 1];
+                if (!hasBills && lastKey) {
+                    const gap = monthsBetween(lastKey, key) > 1;
+                    html += noticeHTML('info', 'fa-calendar-plus',
+                        `<strong>New billing month &mdash; ${escHtml(monthLabel(key))}.</strong> Last month's current readings were carried over as the <em>Prev</em> readings (from the ${escHtml(monthLabel(lastKey))} bills${gap ? '; no bills were saved for the months in between' : ''}). The <em>Curr</em> boxes are empty &mdash; enter the new meter readings, then click <strong>Generate &amp; Save Bills</strong>.`);
+                } else if (!hasBills && !lastKey) {
+                    html += noticeHTML('info', 'fa-flag-checkered',
+                        `<strong>First billing month.</strong> Enter each meter's starting reading in <em>Prev</em> and today's reading in <em>Curr</em>. From next month on, <em>Prev</em> fills in automatically.`);
+                }
+                if (/^\d{4}-\d{2}$/.test(settingsMonthKey) && monthsBetween(settingsMonthKey, key) > 0) {   // only when moving forward
+                    html += noticeHTML('warn', 'fa-calendar-day',
+                        `<strong>Statement dates are still set for ${escHtml(monthLabel(settingsMonthKey))}</strong> (Rent Month &amp; Year, Utilities Date Range, Statement Header Date). Update them before exporting PDFs for ${escHtml(monthLabel(key))}.`,
+                        `<button type="button" class="btn btn-warning btn-sm" data-notice="sync"><i class="fas fa-sync-alt"></i> Update to ${escHtml(monthLabel(key))}</button><button type="button" class="btn btn-outline btn-sm" data-notice="dismiss">Keep as is</button>`);
+                }
             }
-            // Save to localStorage and re-render to update totals
-            saveToStorage();
-            renderTenants();
+            el.innerHTML = html;
+        }
+        function syncSettingsToMonth() {
+            const key = monthSelect.value;
+            const from = settingsMonthKey || key;
+            const delta = monthsBetween(from, key);
+            if (rentMonthYearInput.value) rentMonthYearInput.value = shiftMonthKey(rentMonthYearInput.value, delta);
+            if (descriptionDateFromInput.value) descriptionDateFromInput.value = shiftDateISO(descriptionDateFromInput.value, delta);
+            if (descriptionDateToInput.value) descriptionDateToInput.value = shiftDateISO(descriptionDateToInput.value, delta);
+            statementHeaderDateInput.value = todayLocal();
+            settingsMonthKey = key;
+            saveSettings();
+            renderMonthNotice();
+            showToast(advanceRent.length ? 'Dates updated. Advance Rent entries were left unchanged — please review them.' : `Statement dates updated for ${monthLabel(key)}.`, 'success');
+        }
+
+        // ---------- Edit a field ----------
+        const FIELD_MAP = { room: '_room', name: 'name', billTo: '_billTo', rent: '_rent', elecPrev: '_elecPrev', elecCurr: '_elecCurr', elecRate: '_elecRate', waterPrev: '_waterPrev', waterCurr: '_waterCurr', waterRate: '_waterRate' };
+        const NUM_FIELDS = ['rent', 'elecPrev', 'elecCurr', 'elecRate', 'waterPrev', 'waterCurr', 'waterRate'];
+        const BLANKABLE_FIELDS = ['elecCurr', 'waterCurr'];
+
+        function updateTenantField(tenantId, field, rawValue) {
+            const tenant = tenants.find(t => t.id === tenantId);
+            if (!tenant || !FIELD_MAP[field]) return;
+            const monthKey = monthSelect.value;
+            if (field === 'name') {
+                tenant.name = rawValue;
+            } else if (NUM_FIELDS.includes(field)) {
+                let val = parseFloat(rawValue);
+                if (isNaN(val)) val = BLANKABLE_FIELDS.includes(field) ? null : 0;
+                tenant[FIELD_MAP[field]] = val;
+                setDraft(tenant, monthKey, field, val);
+            } else {
+                tenant[FIELD_MAP[field]] = rawValue;
+                setDraft(tenant, monthKey, field, rawValue);
+            }
+            refreshRow(tenantId);
+            schedulePersist();
         }
 
         window.removeTenant = function(id) {
-            if (!confirm('Remove this tenant?')) return;
+            if (!confirm('Remove this tenant and all of their saved bills?')) return;
             tenants = tenants.filter(t => t.id !== id);
-            // Also remove their bills
+            // Also remove their bills and unsaved edits
             allBills = allBills.filter(b => b.tenantId !== id);
-            saveToStorage(); renderTenants();
+            Object.keys(drafts).forEach(k => { if (drafts[k]) { delete drafts[k][id]; if (!Object.keys(drafts[k]).length) delete drafts[k]; } });
+            saveToStorage(); renderTenants(); renderMonthNotice();
             showToast('Tenant removed', 'success');
         };
 
         function addTenant() {
-            const nt = { 
-                id: generateId(), 
-                room: String(100+tenants.length+1), 
-                name: `New Tenant ${tenants.length+1}`, 
-                billTo: '', 
-                rent: DEFAULT_RENT, 
-                elecRate: DEFAULT_ELEC_RATE, 
-                waterRate: DEFAULT_WATER_RATE, 
-                _room: String(100+tenants.length+1), 
-                _elecPrev: 0, 
-                _elecCurr: 0, 
-                _waterPrev: 0, 
-                _waterCurr: 0, 
-                _rent: DEFAULT_RENT, 
-                _billTo: '' 
+            const n = tenants.length + 1;
+            const nt = {
+                id: generateId(),
+                room: String(100 + n),
+                name: `New Tenant ${n}`,
+                billTo: '',
+                rent: DEFAULT_RENT,
+                elecRate: DEFAULT_ELEC_RATE,
+                waterRate: DEFAULT_WATER_RATE
             };
             tenants.push(nt);
-            saveToStorage(); renderTenants();
-            showToast('New tenant added!', 'success');
+            saveToStorage();
+            loadMonthForAll(monthSelect.value, true);
+            showToast('New tenant added! Enter their starting readings under Prev.', 'success');
+            const row = tenantsBody.querySelector(`tr[data-tenant-id="${CSS.escape(nt.id)}"]`);
+            if (row) { row.scrollIntoView({ block: 'center', behavior: 'smooth' }); const nm = row.querySelector('[data-field="name"]'); if (nm) { nm.focus(); nm.select(); } }
+        }
+
+        // ---------- Month navigation ----------
+        function stepMonth(delta) {
+            const key = shiftMonthKey(monthSelect.value, delta);
+            ensureMonthOption(key);
+            monthSelect.value = key;
+            monthSelect.dispatchEvent(new Event('change'));
+        }
+        // Save this month's bills, then jump to the next month (readings carry over, Curr boxes empty)
+        function startNextMonth() {
+            const cur = monthSelect.value;
+            if (!cur) return;
+            if (!generateAndSaveAllBills()) return;
+            const next = shiftMonthKey(cur, 1);
+            ensureMonthOption(next);
+            monthSelect.value = next;
+            updateMonthDisplay();
+            loadMonthForAll(next, true);
+            showToast(`${monthLabel(cur)} saved. Now on ${monthLabel(next)} — readings carried over.`, 'success');
         }
 
         // ---------- Generate and Save Bills ----------
@@ -1335,23 +1567,9 @@
             const advance = (settings.advanceRent || []).find(a => a.tenantId === tenant.id);
             const rentMonthsForTenant = cleanMonthList([settings.rentMonthYear || monthKey, ...(advance ? advance.months : [])]);
 
-            const room = tenant._room || tenant.room || '';
-            const billTo = tenant._billTo || '';
-            const rent = tenant._rent || DEFAULT_RENT;
-            const elecPrev = tenant._elecPrev || 0; 
-            const elecCurr = tenant._elecCurr || 0;
-            const elecRate = tenant._elecRate || DEFAULT_ELEC_RATE;
-            const waterPrev = tenant._waterPrev || 0; 
-            const waterCurr = tenant._waterCurr || 0;
-            const waterRate = tenant._waterRate || DEFAULT_WATER_RATE;
-            
-            const elecUnits = Math.max(0, elecCurr - elecPrev);
-            const elecCostRaw = elecUnits * elecRate;
-            const elecCost = roundUpElectricCost(elecCostRaw);
-            
-            const waterUnits = Math.max(0, waterCurr - waterPrev);
-            const waterResult = getWaterBreakdown(waterUnits, waterRate);
-            const waterCost = waterResult.total;
+            // A blank current reading is billed as "no usage" (current = previous) so it carries over correctly
+            const rv = rowValues(tenant);
+            const { room, billTo, rent, elecPrev, elecCurr, elecRate, elecUnits, elecCost, waterPrev, waterCurr, waterRate, waterUnits, waterResult, waterCost } = rv;
             const utilitiesTotal = elecCost + waterCost;
             const overallTotal = rent + utilitiesTotal;
             
@@ -1376,6 +1594,8 @@
                 waterBreakdown: waterResult.breakdown,
                 waterMinimumApplied: waterResult.minimumApplied,
                 waterExcessUnits: waterResult.excessUnits,
+                elecReadingMissing: rv.elecBlank,
+                waterReadingMissing: rv.waterBlank,
                 utilitiesTotal,
                 overallTotal,
                 timestamp: new Date().toISOString(),
@@ -1396,30 +1616,37 @@
 
         function generateAndSaveAllBills() {
             const monthKey = monthSelect.value;
-            if (!monthKey) { showToast('Select a billing month.', 'error'); return; }
+            if (!monthKey) { showToast('Select a billing month.', 'error'); return false; }
+            if (!tenants.length) { showToast('Add a tenant first.', 'error'); return false; }
             const [y,m] = monthKey.split('-').map(Number);
-            
-            // First, save all current tenant data
-            saveToStorage();
-            
+
+            // Check the readings before saving
+            const missing = [], lower = [];
+            tenants.forEach(t => {
+                const v = rowValues(t);
+                if (v.elecBlank || v.waterBlank) missing.push(tenantLabel(t) + (v.elecBlank && v.waterBlank ? '' : (v.elecBlank ? ' (electric)' : ' (water)')));
+                if (v.elecNeg || v.waterNeg) lower.push(tenantLabel(t));
+            });
+            let warning = '';
+            if (missing.length) warning += 'No current reading entered yet for:\n  \u2022 ' + missing.join('\n  \u2022 ') + '\nThey will be billed with zero usage (the water minimum still applies) and the previous reading carries over unchanged.\n\n';
+            if (lower.length) warning += 'Current reading is LOWER than the previous reading for:\n  \u2022 ' + lower.join('\n  \u2022 ') + '\nUsage for those meters is billed as 0.\n\n';
+            if (warning && !confirm(warning + 'Generate and save the bills anyway?')) return false;
+
             let generated = 0;
             let updated = 0;
-            
             tenants.forEach(tenant => {
                 const bill = generateBillForTenant(tenant, monthKey);
                 const idx = allBills.findIndex(b => b.tenantId === tenant.id && b.monthKey === monthKey);
-                if (idx !== -1) {
-                    allBills[idx] = bill;
-                    updated++;
-                } else {
-                    allBills.push(bill);
-                    generated++;
-                }
+                if (idx !== -1) { allBills[idx] = bill; updated++; }
+                else { allBills.push(bill); generated++; }
             });
-            
+            delete drafts[monthKey];   // everything is saved in the bills now
+
+            ensureBillMonthOptions();
             saveToStorage();
-            renderTenants();
-            showToast(`✅ Generated ${generated} new bills and updated ${updated} existing bills for ${formatMonthDisplay(y,m)}`, 'success');
+            loadMonthForAll(monthKey, true);
+            showToast(`\u2705 Generated ${generated} new bills and updated ${updated} existing bills for ${formatMonthDisplay(y,m)}`, 'success');
+            return true;
         }
 
         // ---------- Render History ----------
@@ -2423,8 +2650,8 @@
         function clearAll() {
             if (!confirm('Delete ALL tenants and billing records permanently?')) return;
             if (!confirm('This cannot be undone! Are you sure?')) return;
-            tenants = []; allBills = []; payments = [];
-            saveToStorage(); renderTenants(); renderHistory();
+            tenants = []; allBills = []; payments = []; drafts = {};
+            saveToStorage(); renderTenants(); renderHistory(); renderMonthNotice();
             showToast('All data cleared.', 'success');
         }
 
@@ -2434,6 +2661,7 @@
                 tenants,
                 bills: allBills,
                 payments,
+                drafts,
                 billingLogo: billingLogoDataUrl || DEFAULT_LOGO_DATA_URL,
                 signatories: {
                     approvedByName: approvedByNameInput.value.trim(),
@@ -2441,7 +2669,7 @@
                     preparedByName: preparedByNameInput.value.trim(),
                     preparedByTitle: preparedByTitleInput.value.trim()
                 },
-                version: '1.1',
+                version: '1.2',
                 exportedAt: new Date().toISOString()
             };
             const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -2466,6 +2694,7 @@
                     });
                     allBills = data.bills || [];
                     if (Array.isArray(data.payments)) payments = data.payments;
+                    drafts = (data.drafts && typeof data.drafts === 'object') ? data.drafts : {};
                     if (data.billingLogo) {
                         billingLogoDataUrl = data.billingLogo;
                         saveLogo();
@@ -2478,7 +2707,8 @@
                         saveSettings();
                     }
                     saveToStorage();
-                    renderTenants();
+                    ensureBillMonthOptions();
+                    loadMonthForAll(monthSelect.value, true);
                     renderHistory();
                     showToast(`Imported ${tenants.length} tenants and ${allBills.length} bills.`, 'success');
                 } catch(err) {
@@ -2489,18 +2719,56 @@
         }
 
         // ---------- Event Listeners ----------
-        monthSelect.addEventListener('change', function() { 
-            if (this.value) { 
-                currentMonthKey=this.value; 
-                updateMonthDisplay(); 
-                loadMonthForAll(this.value); 
-            } 
+        monthSelect.addEventListener('change', function() {
+            if (this.value) {
+                currentMonthKey = this.value;
+                updateMonthDisplay();
+                loadMonthForAll(this.value, true);
+            }
         });
-        loadBtn.addEventListener('click', function() { 
-            const key=monthSelect.value; 
-            if(key) loadMonthForAll(key); 
+        loadBtn.addEventListener('click', function() {
+            const key = monthSelect.value;
+            if (!key) return;
+            if (hasDrafts(key) && !confirm('Discard your unsaved edits for this month and reload the saved / carried-over values?')) return;
+            delete drafts[key];
+            writeStorage();
+            loadMonthForAll(key);
         });
-        generateAllBtn.addEventListener('click', generateAndSaveAllBills);
+        generateAllBtn.addEventListener('click', function() { generateAndSaveAllBills(); });
+        document.getElementById('startNextMonthBtn').addEventListener('click', startNextMonth);
+        document.getElementById('prevMonthBtn').addEventListener('click', function() { stepMonth(-1); });
+        document.getElementById('nextMonthBtn').addEventListener('click', function() { stepMonth(1); });
+        document.getElementById('monthNotice').addEventListener('click', function(e) {
+            const btn = e.target.closest('[data-notice]');
+            if (!btn) return;
+            if (btn.dataset.notice === 'sync') syncSettingsToMonth();
+            else { settingsMonthKey = monthSelect.value; saveSettings(); renderMonthNotice(); }
+        });
+
+        // Table editing: one set of delegated listeners (rows are updated in place, so focus is never lost)
+        tenantsBody.addEventListener('input', function(e) {
+            const el = e.target.closest('[data-field]');
+            if (el) updateTenantField(el.dataset.id, el.dataset.field, el.value);
+        });
+        tenantsBody.addEventListener('change', function(e) {
+            const el = e.target.closest('[data-field]');
+            if (!el) return;
+            updateTenantField(el.dataset.id, el.dataset.field, el.value);
+            if (['name', 'room'].includes(el.dataset.field)) refreshAdvanceRows();
+        });
+        tenantsBody.addEventListener('focusin', function(e) {
+            if (e.target.matches('input[type="number"]')) e.target.select();
+        });
+        tenantsBody.addEventListener('keydown', function(e) {
+            if (e.key !== 'Enter') return;
+            const el = e.target.closest('[data-field]');
+            if (!el) return;
+            e.preventDefault();
+            const tr = el.closest('tr');
+            const sib = e.shiftKey ? tr.previousElementSibling : tr.nextElementSibling;
+            const next = sib && sib.querySelector('[data-field="' + el.dataset.field + '"]');
+            if (next) { next.focus(); if (next.select) next.select(); } else { el.blur(); }
+        });
         addAdvanceBtn.addEventListener('click', addAdvanceRow);
         addTenantBtn.addEventListener('click', addTenant);
         pdfAllBtn.addEventListener('click', exportAllPDFs);
@@ -2543,9 +2811,9 @@
         loadLogo();
         loadSettings();
         loadFromStorage();
+        ensureBillMonthOptions();
         renderReceipts();
-        const initKey = monthSelect.value;
-        if (initKey) loadMonthForAll(initKey);
+        if (monthSelect.value) loadMonthForAll(monthSelect.value, true);
         console.log('✅ Elena\'s Apartment Multi-Tenant Billing System ready. (Electric cost rounded up)');
     })();
 </script>
