@@ -558,6 +558,7 @@
             <div class="setting-group"><label><i class="fas fa-calendar-check"></i> Rent Due Date</label><input type="number" id="rentDueDay" min="1" max="31" value="1" /></div>
             <div class="setting-group"><label><i class="fas fa-bolt"></i> Utilities Due Date</label><input type="number" id="utilitiesDueDay" min="1" max="31" value="5" /></div>
             <div class="setting-group"><label><i class="fas fa-hourglass-half"></i> Rent Grace Period (days)</label><input type="number" id="gracePeriodDays" min="0" max="30" value="2" /></div>
+            <div class="setting-group"><label><i class="fas fa-faucet"></i> Water Fixed Cost / Minimum (&#8369;)</label><input type="number" id="waterMinimumCharge" min="0" step="0.01" value="300" title="Fixed water charge that covers the first 10 m³. Shown on the PDF statement." /></div>
             <div class="setting-group"><label><i class="fas fa-calendar-day"></i> Statement Header Date</label><input type="date" id="statementHeaderDate" /></div>
             <div class="setting-group"><label><i class="fas fa-calendar-alt"></i> Rent Month &amp; Year</label><input type="month" id="rentMonthYear" title="Shown beside RENT on the PDF for every tenant. Leave blank to use the selected billing month." /></div>
             <div class="setting-group"><label><i class="fas fa-bolt"></i> Utilities Date Range</label><div style="display:flex;gap:6px;align-items:center;"><input type="date" id="descriptionDateFrom" style="flex:1;" /><span>to</span><input type="date" id="descriptionDateTo" style="flex:1;" /></div></div>
@@ -677,7 +678,7 @@
                 <tfoot id="summaryFooter" style="display: none;"><tr class="summary-row"><td colspan="14" style="text-align:right; font-weight:700;">GRAND TOTAL</td><td id="grandTotal" style="font-weight:800; color:#101a2e; text-align:right; padding-right:8px;">₱0.00</td><td></td></tr></tfoot>
             </table>
         </div>
-        <div class="callout"><i class="fas fa-info-circle"></i> <strong>Water Billing:</strong> First 10 m³ = ₱300 minimum, excess charged at rate<br><i class="fas fa-redo"></i> <strong>New month:</strong> after you generate &amp; save a month, the next month opens with each <em>Curr</em> reading moved to <em>Prev</em>, the new <em>Curr</em> boxes empty, and rent / rates / room carried forward. Press <strong>Enter</strong> in a reading box to jump to the same box on the next row.</div>
+        <div class="callout"><i class="fas fa-info-circle"></i> <strong>Water Billing:</strong> First 10 m³ = <span id="waterMinDisplay">₱300.00</span> minimum, excess charged at rate<br><i class="fas fa-redo"></i> <strong>New month:</strong> after you generate &amp; save a month, the next month opens with each <em>Curr</em> reading moved to <em>Prev</em>, the new <em>Curr</em> boxes empty, and rent / rates / room carried forward. Press <strong>Enter</strong> in a reading box to jump to the same box on the next row.</div>
     </div>
 
     <!-- Acknowledgement Receipts -->
@@ -786,7 +787,7 @@
     (function() {
         "use strict";
         // ---------- Constants ----------
-        const WATER_MINIMUM_CHARGE = 300;
+        let WATER_MINIMUM_CHARGE = 300; // editable in Billing Settings
         const WATER_FREE_UNITS = 10;
         const STORAGE_KEY = 'elenasApartmentMultiTenantV21';
         const DEFAULT_RENT = 15000;
@@ -806,6 +807,8 @@
         const utilitiesDueDayInput = document.getElementById('utilitiesDueDay');
         const gracePeriodDaysInput = document.getElementById('gracePeriodDays');
         const gracePeriodDisplay = document.getElementById('gracePeriodDisplay');
+        const waterMinimumChargeInput = document.getElementById('waterMinimumCharge');
+        const waterMinDisplay = document.getElementById('waterMinDisplay');
         const statementHeaderDateInput = document.getElementById('statementHeaderDate');
         const rentMonthYearInput = document.getElementById('rentMonthYear');
         const advanceList = document.getElementById('advanceList');
@@ -885,11 +888,20 @@
         }
 
         // ---------- Settings ----------
+        function readWaterMinimum() {
+            const v = parseFloat(waterMinimumChargeInput.value);
+            return (isFinite(v) && v >= 0) ? v : 300;
+        }
+        function applyWaterMinimum() {
+            WATER_MINIMUM_CHARGE = readWaterMinimum();
+            if (waterMinDisplay) waterMinDisplay.textContent = formatCurrency(WATER_MINIMUM_CHARGE);
+        }
         function getSettings() {
             return {
                 rentDueDay: parseInt(rentDueDayInput.value) || 1,
                 utilitiesDueDay: parseInt(utilitiesDueDayInput.value) || 5,
                 gracePeriodDays: parseInt(gracePeriodDaysInput.value) || 2,
+                waterMinimumCharge: readWaterMinimum(),
                 statementHeaderDate: statementHeaderDateInput.value || '',
                 rentMonthYear: rentMonthYearInput.value || '',
                 advanceRent: getAdvanceRentClean(),
@@ -912,6 +924,7 @@
                 if (s.rentDueDay) rentDueDayInput.value = s.rentDueDay;
                 if (s.utilitiesDueDay) utilitiesDueDayInput.value = s.utilitiesDueDay;
                 if (s.gracePeriodDays) gracePeriodDaysInput.value = s.gracePeriodDays;
+                if (s.waterMinimumCharge !== undefined && s.waterMinimumCharge !== null) waterMinimumChargeInput.value = s.waterMinimumCharge;
                 if (s.statementHeaderDate) statementHeaderDateInput.value = s.statementHeaderDate;
                 if (s.rentMonthYear) rentMonthYearInput.value = s.rentMonthYear;
                 else if (Array.isArray(s.rentMonths) && s.rentMonths.length) rentMonthYearInput.value = cleanMonthList(s.rentMonths)[0] || '';
@@ -937,6 +950,7 @@
             if (!/^\d{4}-\d{2}$/.test(settingsMonthKey)) settingsMonthKey = monthSelect.value;
             renderAdvanceRows();
             updateGracePeriodDisplay();
+            applyWaterMinimum();
         }
         // ---------- Advance rent months (per tenant) ----------
         function cleanMonthList(arr) {
@@ -1092,9 +1106,9 @@
         function generateId() { return Date.now().toString(36) + Math.random().toString(36).substr(2,5); }
         function calculateWaterCost(units, rate) { if (units <= WATER_FREE_UNITS) return WATER_MINIMUM_CHARGE; return WATER_MINIMUM_CHARGE + ((units - WATER_FREE_UNITS) * rate); }
         function getWaterBreakdown(units, rate) {
-            if (units <= WATER_FREE_UNITS) return { total: WATER_MINIMUM_CHARGE, breakdown: `₱300 minimum (${units} m³ used)`, excessUnits: 0, minimumApplied: true };
+            if (units <= WATER_FREE_UNITS) return { total: WATER_MINIMUM_CHARGE, breakdown: `${formatCurrency(WATER_MINIMUM_CHARGE)} minimum (${units} m³ used)`, excessUnits: 0, minimumApplied: true };
             const excessUnits = units - WATER_FREE_UNITS; const excessCost = excessUnits * rate;
-            return { total: WATER_MINIMUM_CHARGE + excessCost, breakdown: `₱300 + (${excessUnits} m³ × ₱${rate}) = ${formatCurrency(WATER_MINIMUM_CHARGE + excessCost)}`, excessUnits, minimumApplied: false };
+            return { total: WATER_MINIMUM_CHARGE + excessCost, breakdown: `${formatCurrency(WATER_MINIMUM_CHARGE)} + (${excessUnits} m³ × ₱${rate}) = ${formatCurrency(WATER_MINIMUM_CHARGE + excessCost)}`, excessUnits, minimumApplied: false };
         }
         
         // Round up electric cost to whole number
@@ -1592,6 +1606,7 @@
                 waterUnits,
                 waterCost,
                 waterBreakdown: waterResult.breakdown,
+                waterMinimumCharge: WATER_MINIMUM_CHARGE,
                 waterMinimumApplied: waterResult.minimumApplied,
                 waterExcessUnits: waterResult.excessUnits,
                 elecReadingMissing: rv.elecBlank,
@@ -1774,7 +1789,7 @@
                         ${showUtilities ? `
                         <p><strong>Meter Readings:</strong></p>
                         <p style="font-size:0.75rem;">Electricity: ${bill.elecPrev} → ${bill.elecCurr} (<span class="elec-unit">${bill.elecUnits.toFixed(1)} kWh</span> used) &nbsp;|&nbsp; Water: ${bill.waterPrev} → ${bill.waterCurr} (${bill.waterUnits.toFixed(1)} m³ used)</p>
-                        <p class="water-note" style="font-size:0.65rem;">Water billing: First 10 m³ = ₱300 minimum</p>
+                        <p class="water-note" style="font-size:0.65rem;">Water billing: First 10 m³ = ${formatCurrency(bill.waterMinimumCharge ?? 300)} minimum</p>
                         ` : ''}
                         
                         <div class="payment-note">
@@ -2798,6 +2813,14 @@
                 importData(this.files[0]); 
                 this.value = ''; 
             } 
+        });
+        waterMinimumChargeInput.addEventListener('input', function() {
+            applyWaterMinimum();
+            saveSettings();
+            renderTenants();
+        });
+        waterMinimumChargeInput.addEventListener('blur', function() {
+            if (this.value === '' || !(parseFloat(this.value) >= 0)) { this.value = 300; applyWaterMinimum(); saveSettings(); renderTenants(); }
         });
         rentDueDayInput.addEventListener('change', saveSettings);
         utilitiesDueDayInput.addEventListener('change', saveSettings);
